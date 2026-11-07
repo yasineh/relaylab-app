@@ -3,52 +3,94 @@
 How to run, test, and work on RelayLab locally. Everything here reflects what is
 implemented today; sections are added as features ship.
 
+Every command runs from the **repository root** through pnpm. The repo is a pnpm
+workspace with two packages: `web` (React app) and `backend` (Go module; its
+`package.json` wraps Go tooling).
+
 ## Prerequisites
 
 | Tool | Version | Used for |
 |---|---|---|
-| Docker + Docker Compose | Docker 24+ | Local stack, test database, sqlc and gitleaks images |
-| Go | 1.27+ | API, worker, tests (only needed to run outside Docker) |
-| Node.js + npm | Node 22+ (24 recommended) | Web app (only needed to run outside Docker) |
-| make | any | Developer commands (`make help`) |
+| pnpm | 10+ (repo pins 12.16.1 in `packageManager`) | Workspace commands |
+| Node.js | 22+ (24 recommended) | Web app |
+| Go | 1.27+ | API, worker, backend tests |
+| Docker + Docker Compose | Docker 24+ | Postgres, the test database, sqlc and gitleaks images |
 
-## Quick start (Docker)
+## Quick start
 
 ```sh
 cp .env.example .env
-docker compose up --build
+pnpm install
+pnpm dev
 ```
 
-Then open <http://localhost:5173>. The home page shows live API readiness.
+`pnpm dev` starts Postgres in Docker, applies migrations, then runs three
+processes in parallel with prefixed output:
 
-The stack starts these services:
-
-| Service | What it does | Host port |
+| Process | What it does | URL |
 |---|---|---|
-| `postgres` | PostgreSQL 17. On first start, `deploy/local/initdb/00_roles.sh` creates the schemas and roles | `127.0.0.1:54320` |
-| `migrate` | One-shot `api migrate` using the migrator role; exits when done | — |
-| `api` | Go HTTP server: `/healthz`, `/readyz`, `/api/v1/*`, and the embedded web build | `127.0.0.1:8080` |
-| `worker` | Background worker. No job handlers exist yet; it exposes health only | `127.0.0.1:8081` |
-| `web` | Vite dev server with hot reload. Proxies `/api`, `/h`, `/healthz`, `/readyz` to `api` | `127.0.0.1:5173` |
+| `web dev` | Vite dev server with hot reload. Proxies `/api`, `/h`, `/healthz`, `/readyz` to the API | <http://localhost:5173> |
+| `backend dev:api` | Go HTTP server: `/healthz`, `/readyz`, `/api/v1/*` | <http://localhost:8080> |
+| `backend dev:worker` | Background worker. No job handlers exist yet; it exposes health only | <http://localhost:8081> |
 
-Check it is healthy:
+Open <http://localhost:5173>; the home page shows live API readiness. Press
+Ctrl-C to stop all three. Postgres keeps running; stop it with `pnpm db:down`.
+
+Run only one side with `pnpm dev:web` or `pnpm dev:backend`.
 
 ```sh
 curl localhost:8080/healthz   # {"status":"ok"}
 curl localhost:8080/readyz    # {"status":"ready"}
 ```
 
-If a port is already taken on your machine, change `API_HOST_PORT`,
-`WORKER_HOST_PORT`, `WEB_HOST_PORT`, or `POSTGRES_HOST_PORT` in `.env`. If you
-change `WEB_HOST_PORT`, set `APP_ORIGIN` to the same URL.
+### Everything in Docker instead
 
-Stop with `make down` (keeps data) or `docker compose down -v` (deletes the
-local database volume, which re-runs the role init on next start).
+```sh
+pnpm dev:docker   # docker compose up --build
+```
+
+This runs `postgres`, a one-shot `migrate`, `api`, `worker`, and `web` (Vite in
+a container) from the production image layout.
+
+### Ports
+
+If a port is taken on your machine, change it in `.env`:
+
+| Variable | Default | Used by |
+|---|---|---|
+| `WEB_HOST_PORT` | 5173 | Vite (natively and in Docker). Keep `APP_ORIGIN` in sync |
+| `API_HOST_PORT` | 8080 | API container port mapping (`pnpm dev` uses `HTTP_ADDR`) |
+| `WORKER_HOST_PORT` | 8081 | Worker container port mapping (`pnpm dev` uses `WORKER_HEALTH_ADDR`) |
+| `POSTGRES_HOST_PORT` | 54320 | Dev database |
+| `POSTGRES_TEST_HOST_PORT` | 54321 | Integration-test database |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `pnpm dev` | Postgres + migrations, then web, api and worker with hot reload |
+| `pnpm dev:docker` | The whole stack in Docker Compose |
+| `pnpm db:up` / `pnpm db:down` | Start or stop the dev Postgres container |
+| `pnpm migrate` | Apply migrations with the migrator role |
+| `pnpm test` | Web tests (Vitest + React Testing Library) and Go unit + integration tests |
+| `pnpm lint` | oxlint for web; `go vet` and the gofmt check for backend |
+| `pnpm typecheck` | TypeScript (`tsc -b`) for web |
+| `pnpm format` / `pnpm format:check` | Prettier for web; gofmt for backend |
+| `pnpm build` | Production web build and an API binary that embeds it (`backend/bin/`) |
+| `pnpm check` | Format check, lint, typecheck, tests and build: run before pushing |
+| `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
+| `pnpm secrets:scan` | gitleaks over the working tree |
+
+Package-level scripts also work, for example
+`pnpm --filter @relaylab/web test:watch`.
 
 ## Configuration
 
 All configuration comes from environment variables. `.env.example` lists them
-with safe, dev-only placeholders. Never commit a real `.env`.
+with safe, dev-only placeholders; never commit a real `.env`. The backend
+scripts load the root `.env` through `backend/scripts/with-env.sh`, and Vite
+reads it in `web/vite.config.ts`. Production gets configuration from the
+deployment environment, never a file.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -57,7 +99,7 @@ with safe, dev-only placeholders. Never commit a real `.env`.
 | `HTTP_ADDR` | `:8080` | API listen address |
 | `WORKER_HEALTH_ADDR` | `:8081` | Worker health listen address |
 | `DATABASE_URL` | — (required) | Runtime connection as `app_runtime` |
-| `MIGRATION_DATABASE_URL` | — | Migrator connection as `app_migrator`; read only by `api migrate` |
+| `MIGRATION_DATABASE_URL` | — | Migrator connection as `app_migrator`; read only by `migrate` |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `TRUSTED_PROXY_CIDRS` | empty | CIDRs whose `X-Forwarded-For` is trusted. Empty trusts none |
 | `SHUTDOWN_GRACE` | `20s` | Time allowed for in-flight work on SIGTERM |
@@ -67,9 +109,10 @@ names the variable but never prints its value.
 
 ### Limits
 
-Every product limit lives in one place, `internal/platform/config/limits.go`,
-with a documented default and a `LIMIT_*` override. Overrides must be positive
-integers. A test fails if a limit value is hard-coded anywhere else.
+Every product limit lives in one place,
+`backend/internal/platform/config/limits.go`, with a documented default and a
+`LIMIT_*` override. Overrides must be positive integers. A test fails if a limit
+value is hard-coded anywhere else.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -83,73 +126,38 @@ the Better Auth service (added in `add-user-auth`) and is currently empty.
 
 | Role | Can do | Used by |
 |---|---|---|
-| `app_migrator` | DDL on `app` | `api migrate` |
+| `app_migrator` | DDL on `app` | `pnpm migrate` |
 | `app_runtime` | Read/write data in `app`; no DDL | API and worker |
 | `auth_migrator` | DDL on `auth` | Better Auth migrations (later) |
 | `auth_runtime` | Read/write data in `auth` | Better Auth service (later) |
 
 `deploy/sql/roles.sql` creates these schemas, roles, and grants idempotently.
 It reads role passwords from `relaylab.*_password` session settings, so the file
-itself never contains secrets.
+itself never contains secrets. The dev Postgres container runs it on first start
+via `deploy/local/initdb/00_roles.sh`.
 
-Migrations are goose SQL files in `migrations/`, embedded into the API binary.
-goose keeps its version table in `app.goose_db_version`.
+Migrations are goose SQL files in `backend/migrations/`, embedded into the API
+binary. goose keeps its version table in `app.goose_db_version`. `/readyz`
+returns 503 until the database is reachable and every embedded migration is
+applied.
 
-```sh
-make migrate                 # outside Docker, uses MIGRATION_DATABASE_URL from .env
-docker compose run --rm migrate
-```
-
-`/readyz` returns 503 until the database is reachable and every embedded
-migration is applied.
+To reset the dev database, run `docker compose down -v` (deletes the volume), then `pnpm dev`.
 
 ### SQL code generation
 
-Queries live in `db/queries/*.sql`; sqlc generates typed Go code into
-`internal/platform/db/store`. Run `make sqlc` after changing queries or
-migrations (it uses the pinned `sqlc/sqlc` Docker image).
+Queries live in `backend/db/queries/*.sql`; sqlc generates typed Go code into
+`backend/internal/platform/db/store`. Run `pnpm sqlc` after changing queries or
+migrations. It uses the pinned `sqlc/sqlc` Docker image.
 
-## Running outside Docker
+## Tests
 
-Start only Postgres, then run each process from the repo root:
-
-```sh
-docker compose up -d postgres
-set -a; . ./.env; set +a
-go run ./cmd/api migrate
-go run ./cmd/api            # http://localhost:8080
-go run ./cmd/worker         # health on :8081
-cd web && npm install && npm run dev   # http://localhost:5173
-```
-
-`make build` builds `bin/api` and `bin/worker` without the web app (Vite serves
-it in development). `make build-embed` builds the web app and an API binary that
-serves it, which is the production layout used by the `Dockerfile`.
-
-## Tests and checks
-
-```sh
-make test-go      # Go unit + integration tests (starts an isolated test Postgres)
-make test-web     # Vitest + React Testing Library
-make lint         # go vet, gofmt check, oxlint, TypeScript
-make secrets-scan # gitleaks over the working tree
-```
-
-Integration tests run against a separate `postgres-test` container (Compose
-profile `test`, port 54321, in-memory storage). Each test creates and drops its
-own database. Postgres roles are shared across a whole server, so tests must
-never point at the dev database server.
-
-For the web app:
-
-```sh
-cd web
-npm run typecheck
-npm run lint
-npm run format:check
-npm test -- --run
-npm run build
-```
+`pnpm test` runs both suites. Go integration tests use a separate
+`postgres-test` container (Compose profile `test`, port 54321, in-memory
+storage), which the backend test script starts automatically. Each test creates
+and drops its own database. Postgres roles are shared across a whole server, so
+tests never point at the dev database server. With `RELAYLAB_REQUIRE_DB=1`, set
+by the script, database tests fail instead of skipping when no database is
+available.
 
 ## Logging and errors
 
@@ -167,14 +175,17 @@ npm run build
 ## Repository layout
 
 ```
-cmd/api            HTTP server and `migrate` subcommand
-cmd/worker         background worker (health only for now)
-internal/platform  config, limits, logging, httpx, db, health
-internal/webui     serves the embedded web build (`-tags embedweb`)
-migrations/        goose SQL migrations (app schema)
-db/queries/        sqlc queries
-deploy/            local init scripts and roles.sql
-web/               React + TypeScript + Vite app
-openspec/          specifications and planned changes
-docs/              documentation
+package.json, pnpm-workspace.yaml   workspace root: run everything from here
+backend/                            Go module `relaylab`
+  cmd/api                           HTTP server and `migrate` subcommand
+  cmd/worker                        background worker (health only for now)
+  internal/platform                 config, limits, logging, httpx, db, health
+  internal/webui                    serves the embedded web build (`-tags embedweb`)
+  migrations/                       goose SQL migrations (app schema)
+  db/queries/                       sqlc queries
+  scripts/                          env loader and test runner used by package scripts
+web/                                React + TypeScript + Vite app
+deploy/                             roles.sql and local Postgres init
+openspec/                           specifications and planned changes
+docs/                               documentation
 ```

@@ -1,7 +1,7 @@
 # Database schema (ERD)
 
 This document describes the **actual** schema created by the migrations in
-`migrations/` and by `deploy/sql/roles.sql`. It is updated by every change that
+`backend/migrations/` and by `deploy/sql/roles.sql`. It is updated by every change that
 alters the schema.
 
 ## Current state
@@ -13,7 +13,7 @@ by later changes.
 
 | Schema | Owner role | Managed by | Contents today |
 |---|---|---|---|
-| `app` | `app_migrator` | goose migrations in `migrations/` | `goose_db_version` (migration bookkeeping) |
+| `app` | `app_migrator` | goose migrations in `backend/migrations/` | `goose_db_version` (migration bookkeeping) |
 | `auth` | `auth_migrator` | Better Auth migrations (from `add-user-auth`) | Empty |
 
 Nothing is created in `public`; `CREATE` on `public` is revoked.

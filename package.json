@@ -1,0 +1,28 @@
+{
+  "name": "relaylab",
+  "private": true,
+  "description": "RelayLab: receive, inspect, replay, and debug webhooks",
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "dev": "pnpm db:up && pnpm migrate && pnpm -r --parallel run \"/^dev(:api|:worker)?$/\"",
+    "dev:web": "pnpm --filter @relaylab/web dev",
+    "dev:backend": "pnpm db:up && pnpm migrate && pnpm --filter @relaylab/backend --parallel run \"/^dev:(api|worker)$/\"",
+    "dev:docker": "docker compose up --build",
+    "db:up": "docker compose up -d --wait postgres",
+    "db:down": "docker compose down",
+    "migrate": "pnpm --filter @relaylab/backend migrate",
+    "build": "pnpm --filter @relaylab/web build && pnpm --filter @relaylab/backend build:embed",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm --filter @relaylab/web typecheck",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "sqlc": "pnpm --filter @relaylab/backend sqlc",
+    "secrets:scan": "docker run --rm -v \"$PWD:/repo\" zricethezav/gitleaks:v8.21.2 detect --source /repo --no-git --redact -v --config /repo/.gitleaks.toml"
+  }
+}

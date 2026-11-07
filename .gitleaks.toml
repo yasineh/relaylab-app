@@ -1,0 +1,12 @@
+title = "RelayLab gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Dependencies and build output are not project sources"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)backend/bin/''',
+]

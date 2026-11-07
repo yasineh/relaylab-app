@@ -95,7 +95,7 @@ func New(t testing.TB) *DB {
 
 // ApplyRoles runs deploy/sql/roles.sql against the database at adminURL.
 func ApplyRoles(ctx context.Context, adminURL string) error {
-	script, err := os.ReadFile(filepath.Join(RepoRoot(), "deploy", "sql", "roles.sql"))
+	script, err := os.ReadFile(RolesScriptPath())
 	if err != nil {
 		return err
 	}
@@ -115,16 +115,18 @@ func ApplyRoles(ctx context.Context, adminURL string) error {
 	return err
 }
 
-// RepoRoot returns the repository root (directory containing go.mod).
-func RepoRoot() string {
+// RolesScriptPath locates deploy/sql/roles.sql by walking up from the working
+// directory (tests run inside backend/, the script lives at the repo root).
+func RolesScriptPath() string {
+	rel := filepath.Join("deploy", "sql", "roles.sql")
 	dir, _ := os.Getwd()
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
+		if _, err := os.Stat(filepath.Join(dir, rel)); err == nil {
+			return filepath.Join(dir, rel)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "."
+			return rel
 		}
 		dir = parent
 	}

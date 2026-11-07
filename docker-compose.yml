@@ -73,16 +73,25 @@ services:
   # Vite dev server with hot reload; proxies /api, /h and health routes to api.
   web:
     image: node:24-alpine
-    working_dir: /app
-    command: ["sh", "-c", "npm ci --no-audit --no-fund && npm run dev"]
+    working_dir: /repo
+    command:
+      - sh
+      - -c
+      - npm install -g pnpm@12.16.1 >/dev/null && pnpm install --frozen-lockfile --filter @relaylab/web && pnpm --filter @relaylab/web dev
     environment:
       API_PROXY_TARGET: http://api:8080
       VITE_HOST: 0.0.0.0
+      WEB_PORT: "5173"
     ports:
       - "127.0.0.1:${WEB_HOST_PORT:-5173}:5173"
     volumes:
-      - ./web:/app
-      - web_node_modules:/app/node_modules
+      - ./package.json:/repo/package.json:ro
+      - ./pnpm-lock.yaml:/repo/pnpm-lock.yaml:ro
+      - ./pnpm-workspace.yaml:/repo/pnpm-workspace.yaml:ro
+      - ./backend/package.json:/repo/backend/package.json:ro
+      - ./web:/repo/web
+      - web_root_node_modules:/repo/node_modules
+      - web_node_modules:/repo/web/node_modules
     depends_on:
       - api
 
@@ -112,4 +121,5 @@ services:
 
 volumes:
   pgdata:
+  web_root_node_modules:
   web_node_modules:

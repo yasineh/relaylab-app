@@ -1,5 +1,5 @@
 {
-  "name": "relaylab-web",
+  "name": "@relaylab/web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,8 +10,9 @@
     "lint": "oxlint --deny-warnings",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest",
-    "preview": "vite preview"
+    "test": "vitest run",
+    "preview": "vite preview",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.107.1",
@@ -41,8 +42,5 @@
     "typescript": "~7.0.2",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
-  },
-  "engines": {
-    "node": ">=22"
   }
 }

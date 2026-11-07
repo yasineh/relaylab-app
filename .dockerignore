@@ -4,10 +4,10 @@
 .env
 .env.*
 !.env.example
-bin
+backend/bin
 **/node_modules
 web/dist
-internal/webui/dist
+backend/internal/webui/dist
 openspec
 docs
 *.md

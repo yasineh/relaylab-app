@@ -10,13 +10,17 @@ A developer workspace to receive, inspect, replay, and debug HTTP webhooks.
 
 ## Run it locally
 
+Requires pnpm, Node.js 22+, Go 1.27+, and Docker.
+
 ```sh
 cp .env.example .env
-docker compose up --build
+pnpm install
+pnpm dev        # Postgres + migrations, then web, API, and worker
 ```
 
-Open <http://localhost:5173>. See the [development guide](docs/development.md)
-for configuration, tests, and running without Docker.
+Open <http://localhost:5173>. `pnpm test`, `pnpm lint`, and `pnpm build` also
+run from the root. See the [development guide](docs/development.md) for all
+commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 
 ## Documentation
 
@@ -29,4 +33,4 @@ for configuration, tests, and running without Docker.
 ## Stack
 
 Go (chi, pgx, goose, sqlc, slog) · PostgreSQL · React + TypeScript + Vite ·
-Tailwind CSS + shadcn/ui · TanStack Query · Docker Compose.
+Tailwind CSS + shadcn/ui · TanStack Query · pnpm workspace · Docker Compose.

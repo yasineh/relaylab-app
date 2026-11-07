@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema:
+      - db/sqlc/00_schemas.sql
+      - migrations
+    queries: db/queries
+    gen:
+      go:
+        package: store
+        out: internal/platform/db/store
+        sql_package: pgx/v5
+        emit_interface: true
+        emit_empty_slices: true

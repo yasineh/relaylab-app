@@ -1,8 +1,24 @@
 # Continuous integration
 
-CI runs on GitHub Actions (`.github/workflows/ci.yml`) for every pull request
-targeting `main` and every push to `main`. A newer push to the same pull request
-cancels the older run.
+CI runs on GitHub Actions (`.github/workflows/ci.yml`) **only when someone
+starts it manually**. Pushes, pull requests, and Dependabot PRs do not trigger
+it. A newer manual run on the same branch cancels an older one that is still
+running.
+
+## Run CI
+
+From the terminal (any branch that exists on GitHub):
+
+```sh
+git push                                   # the branch must be on GitHub first
+gh workflow run ci.yml --ref <branch>      # start the run
+gh run watch                               # follow it; exits non-zero if it fails
+```
+
+Or in GitHub: **Actions → CI → Run workflow**, then pick the branch.
+
+The result to look at is the **`ci-success`** job: it is green only if every job
+passed.
 
 ## Jobs
 
@@ -13,14 +29,14 @@ cancels the older run.
 | **Frontend** | Prettier, oxlint, TypeScript (`tsc -b`, strict), Vitest, or the production build fails |
 | **Auth service** | Format, lint, typecheck, unit tests, or Better Auth migrations fail for `auth/`. Until `add-user-auth` creates `auth/`, the job passes with a notice |
 | **Auth contract** | The real auth service and the Go session validator disagree (valid, revoked, expired, tampered sessions). Same pre-auth guard |
-| **Security scans** | gitleaks finds a secret (full history on `main`, the PR's commits on pull requests), govulncheck finds a reachable Go vulnerability, or `pnpm audit --prod` reports a high/critical advisory |
+| **Security scans** | gitleaks finds a secret in the full history of the selected branch, govulncheck finds a reachable Go vulnerability, or `pnpm audit --prod` reports a high/critical advisory |
 | **Container image** | The Docker build fails, or Trivy finds a fixable HIGH/CRITICAL vulnerability in the image |
-| **ci-success** | Any job above failed, was cancelled, or was skipped. **This is the only check branch protection needs to require** |
+| **ci-success** | Any job above failed, was cancelled, or was skipped. **This is the one result to check before merging** |
 
 ## Workflow security
 
 - `permissions: contents: read` for the whole workflow; checkouts do not persist credentials.
-- Triggered by `pull_request`, never `pull_request_target`, so fork PRs get no secrets.
+- Triggered only by `workflow_dispatch`, which requires write access to the repository. There is no `pull_request_target`.
 - No repository secrets are used. The Postgres service uses throwaway,
   non-secret test credentials.
 - Third-party actions are pinned to full commit SHAs. Dependabot
@@ -51,20 +67,19 @@ docker build -t relaylab:ci . && \
   image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed relaylab:ci
 ```
 
-## Branch protection (repository owner, one-time)
+## Before merging
 
-GitHub only enforces checks when branch protection is enabled. After the first
-CI run on the repository:
+Because CI does not run automatically, the merge gate is a habit, not a GitHub
+setting:
 
-1. Open **Settings → Branches → Add branch ruleset** (or **Add rule**) for `main`.
-2. Enable **Require a pull request before merging**.
-3. Enable **Require status checks to pass**, and add **`ci-success`** as the only
-   required check.
-4. Enable **Require branches to be up to date before merging**.
-5. Optionally enable **Block force pushes**.
+1. Run `pnpm check` locally, **or** run CI on the branch and confirm `ci-success` is green.
+2. For changes that touch the Dockerfile, dependencies, or workflows, prefer the
+   CI run: it also performs the image build, Trivy, govulncheck, and gitleaks
+   history scans.
 
-Do not add individual jobs as required checks; `ci-success` already covers them,
-and it fails if any of them fails or is skipped.
+GitHub branch protection cannot require `ci-success` here: a required check that
+never starts automatically would block every pull request. Branch protection can
+still require pull requests before merging and block force pushes to `main`.
 
 ## Updating pinned versions
 

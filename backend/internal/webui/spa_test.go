@@ -17,7 +17,7 @@ var testFS = fstest.MapFS{
 
 func get(path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	Handler(testFS).ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+	Handler(testFS).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	return rec
 }
 

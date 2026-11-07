@@ -59,7 +59,7 @@ func Migrate(ctx context.Context, dsn config.Secret, logger *slog.Logger) error 
 	if err != nil {
 		return err
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 	return goose.UpContext(ctx, sqlDB, ".")
 }
 
@@ -72,7 +72,7 @@ func MigrateDownAll(ctx context.Context, dsn config.Secret, logger *slog.Logger)
 	if err != nil {
 		return err
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 	return goose.DownToContext(ctx, sqlDB, ".", 0)
 }
 

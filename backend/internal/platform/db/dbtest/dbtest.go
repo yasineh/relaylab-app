@@ -20,7 +20,9 @@ import (
 )
 
 // Test-only role passwords. Roles are cluster-wide; these are applied to the
-// test cluster only and never used elsewhere.
+// ephemeral test cluster only and never used elsewhere.
+//
+//nolint:gosec // G101: intentional, non-secret credentials for the throwaway test database.
 const (
 	MigratorPassword     = "test-only-app-migrator"
 	RuntimePassword      = "test-only-app-runtime"
@@ -54,7 +56,7 @@ func New(t testing.TB) *DB {
 	if err != nil {
 		t.Fatalf("connect to test cluster: %v", err)
 	}
-	defer admin.Close(ctx)
+	defer func() { _ = admin.Close(ctx) }()
 
 	name := "relaylab_test_" + randHex(6)
 	if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
@@ -68,7 +70,7 @@ func New(t testing.TB) *DB {
 			t.Logf("cleanup connect: %v", err)
 			return
 		}
-		defer c.Close(ctx)
+		defer func() { _ = c.Close(ctx) }()
 		if _, err := c.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
 			t.Logf("cleanup drop: %v", err)
 		}
@@ -103,7 +105,7 @@ func ApplyRoles(ctx context.Context, adminURL string) error {
 	if err != nil {
 		return err
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 	settings := fmt.Sprintf(
 		"SET relaylab.app_migrator_password = '%s'; SET relaylab.app_runtime_password = '%s'; "+
 			"SET relaylab.auth_migrator_password = '%s'; SET relaylab.auth_runtime_password = '%s';",

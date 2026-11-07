@@ -25,6 +25,7 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 ## Documentation
 
 - [Development guide](docs/development.md)
+- [Continuous integration](docs/ci.md)
 - [Architecture overview](docs/architecture/overview.md) (current implementation)
 - [Database schema](docs/architecture/erd.md)
 - [MVP plan and decisions](docs/plan/mvp-plan.md)

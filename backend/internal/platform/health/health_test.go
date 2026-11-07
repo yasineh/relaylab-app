@@ -26,7 +26,7 @@ func get(t *testing.T, c *health.Checker, path string) (int, map[string]any, str
 	r := chi.NewRouter()
 	c.Register(r)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	var body map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("not JSON: %q", rec.Body)

@@ -78,7 +78,7 @@ func logLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 
 func TestRequestIDGeneratedWhenAbsent(t *testing.T) {
 	var logs bytes.Buffer
-	rec := do(newRouter(t, &logs, 1<<20), httptest.NewRequest("GET", "/api/v1/items/1", nil))
+	rec := do(newRouter(t, &logs, 1<<20), httptest.NewRequest(http.MethodGet, "/api/v1/items/1", nil))
 	if id := rec.Header().Get(RequestIDHeader); len(id) != 36 {
 		t.Fatalf("expected generated UUID, got %q", id)
 	}
@@ -86,7 +86,7 @@ func TestRequestIDGeneratedWhenAbsent(t *testing.T) {
 
 func TestSafeRequestIDReusedAndLogged(t *testing.T) {
 	var logs bytes.Buffer
-	req := httptest.NewRequest("GET", "/api/v1/items/1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/items/1", nil)
 	req.Header.Set(RequestIDHeader, "abc-123")
 	rec := do(newRouter(t, &logs, 1<<20), req)
 	if rec.Header().Get(RequestIDHeader) != "abc-123" {
@@ -106,7 +106,7 @@ func TestSafeRequestIDReusedAndLogged(t *testing.T) {
 func TestUnsafeRequestIDReplaced(t *testing.T) {
 	for _, bad := range []string{"abc\n123", strings.Repeat("a", 65), "a b", ""} {
 		var logs bytes.Buffer
-		req := httptest.NewRequest("GET", "/api/v1/items/1", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/items/1", nil)
 		req.Header.Set(RequestIDHeader, bad)
 		rec := do(newRouter(t, &logs, 1<<20), req)
 		if got := rec.Header().Get(RequestIDHeader); got == bad || len(got) != 36 {
@@ -117,7 +117,7 @@ func TestUnsafeRequestIDReplaced(t *testing.T) {
 
 func TestAccessLogUsesRoutePatternAndOmitsSecrets(t *testing.T) {
 	var logs bytes.Buffer
-	req := httptest.NewRequest("GET", "/api/v1/items/item-raw-id-777?token=q-secret", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/items/item-raw-id-777?token=q-secret", nil)
 	req.Header.Set("Authorization", "Bearer hdr-secret")
 	req.Header.Set("Cookie", "sid=cookie-secret")
 	req.Header.Set("User-Agent", "evil\n{\"level\":\"ERROR\",\"msg\":\"forged\"}")
@@ -146,7 +146,7 @@ func TestNotFoundAndMethodNotAllowed(t *testing.T) {
 	var logs bytes.Buffer
 	r := newRouter(t, &logs, 1<<20)
 
-	rec := do(r, httptest.NewRequest("GET", "/api/v1/nope", nil))
+	rec := do(r, httptest.NewRequest(http.MethodGet, "/api/v1/nope", nil))
 	if rec.Code != 404 {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -154,7 +154,7 @@ func TestNotFoundAndMethodNotAllowed(t *testing.T) {
 		t.Fatalf("bad envelope %+v", e)
 	}
 
-	rec = do(r, httptest.NewRequest("DELETE", "/api/v1/items/1", nil))
+	rec = do(r, httptest.NewRequest(http.MethodDelete, "/api/v1/items/1", nil))
 	if rec.Code != 405 || decodeErr(t, rec).Code != "method_not_allowed" {
 		t.Fatalf("got %d %s", rec.Code, rec.Body)
 	}
@@ -163,7 +163,7 @@ func TestNotFoundAndMethodNotAllowed(t *testing.T) {
 func TestPanicRecovered(t *testing.T) {
 	var logs bytes.Buffer
 	r := newRouter(t, &logs, 1<<20)
-	rec := do(r, httptest.NewRequest("GET", "/panic", nil))
+	rec := do(r, httptest.NewRequest(http.MethodGet, "/panic", nil))
 	if rec.Code != 500 {
 		t.Fatalf("status %d", rec.Code)
 	}
@@ -174,7 +174,7 @@ func TestPanicRecovered(t *testing.T) {
 	if !strings.Contains(logs.String(), "goroutine") {
 		t.Fatal("stack trace not logged")
 	}
-	if rec := do(r, httptest.NewRequest("GET", "/api/v1/items/1", nil)); rec.Code != 200 {
+	if rec := do(r, httptest.NewRequest(http.MethodGet, "/api/v1/items/1", nil)); rec.Code != 200 {
 		t.Fatalf("subsequent request failed: %d", rec.Code)
 	}
 }
@@ -183,7 +183,7 @@ func TestSecurityHeaders(t *testing.T) {
 	var logs bytes.Buffer
 	r := newRouter(t, &logs, 1<<20)
 	for _, path := range []string{"/api/v1/items/1", "/api/v1/nope"} {
-		rec := do(r, httptest.NewRequest("GET", path, nil))
+		rec := do(r, httptest.NewRequest(http.MethodGet, path, nil))
 		want := map[string]string{
 			"X-Content-Type-Options": "nosniff",
 			"Referrer-Policy":        "strict-origin-when-cross-origin",
@@ -206,13 +206,13 @@ func TestHeaderLimit(t *testing.T) {
 	var logs bytes.Buffer
 	r := newRouter(t, &logs, 16384)
 
-	ok := httptest.NewRequest("GET", "/api/v1/items/1", nil)
+	ok := httptest.NewRequest(http.MethodGet, "/api/v1/items/1", nil)
 	ok.Header.Set("X-Pad", strings.Repeat("a", 8000))
 	if rec := do(r, ok); rec.Code != 200 {
 		t.Fatalf("small headers rejected: %d", rec.Code)
 	}
 
-	big := httptest.NewRequest("GET", "/api/v1/items/1", nil)
+	big := httptest.NewRequest(http.MethodGet, "/api/v1/items/1", nil)
 	big.Header.Set("X-Pad", strings.Repeat("a", 17000))
 	rec := do(r, big)
 	if rec.Code != http.StatusRequestHeaderFieldsTooLarge || decodeErr(t, rec).Code != "headers_too_large" {
@@ -223,15 +223,15 @@ func TestHeaderLimit(t *testing.T) {
 func TestBodyLimit(t *testing.T) {
 	var logs bytes.Buffer
 	r := newRouter(t, &logs, 1<<20)
-	if rec := do(r, httptest.NewRequest("POST", "/upload", strings.NewReader("small"))); rec.Code != 204 {
+	if rec := do(r, httptest.NewRequest(http.MethodPost, "/upload", strings.NewReader("small"))); rec.Code != 204 {
 		t.Fatalf("small body rejected: %d", rec.Code)
 	}
-	rec := do(r, httptest.NewRequest("POST", "/upload", strings.NewReader(strings.Repeat("x", 50))))
+	rec := do(r, httptest.NewRequest(http.MethodPost, "/upload", strings.NewReader(strings.Repeat("x", 50))))
 	if rec.Code != 413 || decodeErr(t, rec).Code != "body_too_large" {
 		t.Fatalf("got %d %s", rec.Code, rec.Body)
 	}
 	// Unknown length (chunked) is cut off by MaxBytesReader.
-	req := httptest.NewRequest("POST", "/upload", io.MultiReader(strings.NewReader(strings.Repeat("x", 50))))
+	req := httptest.NewRequest(http.MethodPost, "/upload", io.MultiReader(strings.NewReader(strings.Repeat("x", 50))))
 	req.ContentLength = -1
 	if rec := do(r, req); rec.Code != 413 {
 		t.Fatalf("chunked oversize accepted: %d", rec.Code)
@@ -245,7 +245,7 @@ func TestRealIPTrustsOnlyConfiguredProxies(t *testing.T) {
 			a, _ := ClientIP(r.Context())
 			ip = a.String()
 		}))
-		req := httptest.NewRequest("GET", "/", nil)
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.RemoteAddr = remote
 		if xff != "" {
 			req.Header.Set("X-Forwarded-For", xff)
@@ -294,7 +294,7 @@ func TestGracefulShutdownCompletesInFlight(t *testing.T) {
 			resCh <- result{err: err}
 			return
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		b, _ := io.ReadAll(resp.Body)
 		resCh <- result{body: string(b)}
 	}()

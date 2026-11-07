@@ -56,7 +56,7 @@ func run() int {
 	checker.Register(r)
 	srv := httpx.NewServer(cfg.WorkerHealthAddr, r, cfg.Limits.HTTPMaxHeaderBytes, logger)
 
-	ln, err := net.Listen("tcp", cfg.WorkerHealthAddr)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.WorkerHealthAddr)
 	if err != nil {
 		logger.Error("listen failed", slog.String("addr", cfg.WorkerHealthAddr), slog.String("error", err.Error()))
 		return 1

@@ -9,9 +9,11 @@
     "build": "go build -o bin/api ./cmd/api && go build -o bin/worker ./cmd/worker",
     "build:embed": "rm -rf internal/webui/dist && cp -R ../web/dist internal/webui/dist && go build -tags embedweb -o bin/api ./cmd/api && go build -o bin/worker ./cmd/worker",
     "test": "./scripts/with-env.sh ./scripts/test.sh",
-    "lint": "go vet ./... && pnpm run format:check",
+    "lint": "go vet ./... && pnpm run format:check && pnpm run lint:golangci && pnpm run sqlc:check",
     "format": "gofmt -w .",
     "format:check": "test -z \"$(gofmt -l .)\" || { gofmt -l .; echo 'run: pnpm format'; exit 1; }",
-    "sqlc": "docker run --rm -v \"$PWD:/src\" -w /src sqlc/sqlc:1.27.0 generate"
+    "sqlc": "docker run --rm -v \"$PWD:/src\" -w /src sqlc/sqlc:1.27.0 generate",
+    "lint:golangci": "docker run --rm -v \"$PWD:/app\" -w /app -v relaylab-golangci-cache:/root/.cache golangci/golangci-lint:v2.15.0 golangci-lint run",
+    "sqlc:check": "docker run --rm -v \"$PWD:/src\" -w /src sqlc/sqlc:1.27.0 diff"
   }
 }

@@ -82,7 +82,7 @@ func runServer() int {
 	handler := newRouter(routerDeps{cfg: cfg, logger: logger, health: checker, web: webHandler()})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)
 
-	ln, err := net.Listen("tcp", cfg.HTTPAddr)
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.HTTPAddr)
 	if err != nil {
 		logger.Error("listen failed", slog.String("addr", cfg.HTTPAddr), slog.String("error", err.Error()))
 		return 1

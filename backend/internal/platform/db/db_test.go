@@ -23,7 +23,7 @@ func TestRuntimeRoleCannotRunDDL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	for _, stmt := range []string{
 		"CREATE TABLE app.x (id int)",
@@ -46,7 +46,7 @@ func TestSchemasAndOwners(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	owners := map[string]string{}
 	rows, err := conn.Query(ctx, `SELECT n.nspname, r.rolname FROM pg_namespace n
@@ -121,7 +121,7 @@ func TestMigrateUpDownUp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer admin.Close(ctx)
+	defer func() { _ = admin.Close(ctx) }()
 	var owner string
 	if err := admin.QueryRow(ctx, `SELECT tableowner FROM pg_tables
 	  WHERE schemaname = 'app' AND tablename = 'goose_db_version'`).Scan(&owner); err != nil {

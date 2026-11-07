@@ -36,7 +36,7 @@ func TestUnknownAPIPathReturnsJSON404(t *testing.T) {
 	h := testRouter(t, fakeSPA)
 	for _, p := range []string{"/api/v1/unknown", "/api/other", "/h/sometoken"} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
 		var body struct {
 			Error struct{ Code, RequestID string }
 		}
@@ -51,7 +51,7 @@ func TestSPAFallback(t *testing.T) {
 	h := testRouter(t, fakeSPA)
 	for _, p := range []string{"/", "/projects/123", "/settings"} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
 		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "<!doctype html>") {
 			t.Fatalf("%s: got %d %s", p, rec.Code, rec.Body)
 		}
@@ -61,7 +61,7 @@ func TestSPAFallback(t *testing.T) {
 	}
 	// Non-GET methods never fall back to HTML.
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("POST", "/projects", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/projects", nil))
 	if rec.Code == 200 {
 		t.Fatalf("POST fell back to SPA")
 	}
@@ -71,7 +71,7 @@ func TestHealthRoutesMounted(t *testing.T) {
 	h := testRouter(t, nil)
 	for _, p := range []string{"/healthz", "/readyz"} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
 		if rec.Code != 200 {
 			t.Fatalf("%s: %d", p, rec.Code)
 		}
@@ -80,7 +80,7 @@ func TestHealthRoutesMounted(t *testing.T) {
 
 func TestAPIBodyLimit(t *testing.T) {
 	h := testRouter(t, nil)
-	req := httptest.NewRequest("POST", "/api/v1/anything", strings.NewReader(strings.Repeat("x", 70*1024)))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/anything", strings.NewReader(strings.Repeat("x", 70*1024)))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -93,14 +93,14 @@ func TestEmbeddedWebAppAndAPI404(t *testing.T) {
 	h := testRouter(t, webui.Handler(fsys))
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") ||
 		!strings.Contains(rec.Header().Get("Content-Security-Policy"), "script-src 'self'") {
 		t.Fatalf("/: %d %v", rec.Code, rec.Header())
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/unknown", nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/unknown", nil))
 	if rec.Code != 404 || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("/api/v1/unknown: %d %s", rec.Code, rec.Body)
 	}

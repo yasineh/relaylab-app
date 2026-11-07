@@ -19,13 +19,18 @@ func Handler(fsys fs.FS) http.Handler {
 		if name == "" {
 			name = "index.html"
 		}
-		if info, err := fs.Stat(fsys, name); err == nil && !info.IsDir() {
+		if !fs.ValidPath(name) {
+			http.NotFound(w, r)
+			return
+		}
+		// name is cleaned and validated; fs.FS cannot escape its root.
+		if info, err := fs.Stat(fsys, name); err == nil && !info.IsDir() { //nolint:gosec // G703: see above
 			if strings.HasPrefix(name, "assets/") {
 				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 			} else {
 				w.Header().Set("Cache-Control", "no-cache")
 			}
-			http.ServeFileFS(w, r, fsys, name)
+			http.ServeFileFS(w, r, fsys, name) //nolint:gosec // G703: name validated with fs.ValidPath above
 			return
 		} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			http.Error(w, "internal error", http.StatusInternalServerError)

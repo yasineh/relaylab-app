@@ -60,7 +60,7 @@ The security jobs can also be run locally:
 
 ```sh
 pnpm secrets:scan                                                    # gitleaks over the working tree
-(cd backend && go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...)
+(cd backend && go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...)
 pnpm audit --prod --audit-level high
 docker build -t relaylab:ci . && \
   docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.2 \

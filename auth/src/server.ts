@@ -62,7 +62,9 @@ export function createAuthServer({ auth, proxySecret, logger, ready }: ServerDep
     res.on('finish', () => {
       const ms = Number(process.hrtime.bigint() - started) / 1e6
       // Method, path, status, and duration only: no headers, query, or body.
-      logger.info(
+      // Health probes run every few seconds, so they are logged at debug level.
+      const level = path === '/healthz' || path === '/readyz' ? 'debug' : 'info'
+      logger[level](
         { method: req.method, path: loggablePath(path), status: res.statusCode, duration_ms: Math.round(ms) },
         'request',
       )

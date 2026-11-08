@@ -1,6 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
-import { afterEach, beforeEach, vi } from 'vitest'
+import { cleanStores } from 'nanostores'
+import { afterAll, afterEach, beforeEach, vi } from 'vitest'
+
+import { authClient } from '@/lib/auth-client'
 
 beforeEach(() => {
   // Tests never touch the network: any request a test did not mock fails loudly.
@@ -12,4 +15,12 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+})
+
+afterAll(() => {
+  // Better Auth's session store (nanostores) tears down one second after its last
+  // listener leaves, touching `window`. Run that teardown now, while the test
+  // environment still exists, instead of after Vitest has destroyed it.
+  const { session } = (authClient as unknown as { $store: { atoms: Record<string, unknown> } }).$store.atoms
+  cleanStores(session as Parameters<typeof cleanStores>[0])
 })

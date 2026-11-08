@@ -39,6 +39,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "jsdom": "^31.0.0",
+    "nanostores": "1.5.5",
     "oxlint": "^1.92.0",
     "prettier": "^3.9.10",
     "tailwindcss": "^4.3.5",

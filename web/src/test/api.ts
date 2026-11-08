@@ -56,6 +56,7 @@ export const signedOut = {
 export const signedIn = {
   ...signedOut,
   'GET /api/v1/me': { body: me },
+  'GET /api/v1/projects': { body: { items: [] } },
   'GET /api/auth/get-session': {
     body: {
       session: { id: 's1', userId: 'u1' },

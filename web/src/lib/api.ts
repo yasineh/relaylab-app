@@ -17,13 +17,22 @@ export class ApiError extends Error {
   readonly status: number
   readonly code: string
   readonly requestId: string | undefined
+  /** Per-field problems for 422 validation_failed. */
+  readonly fields: Record<string, string> | undefined
 
-  constructor(status: number, code: string, message: string, requestId?: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    requestId?: string,
+    fields?: Record<string, string>,
+  ) {
     super(message)
     this.name = 'ApiError'
     this.status = status
     this.code = code
     this.requestId = requestId
+    this.fields = fields
   }
 }
 
@@ -47,15 +56,19 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   let code = 'http_error'
   let message = 'Something went wrong. Try again.'
   let requestId: string | undefined
+  let fields: Record<string, string> | undefined
   try {
-    const body = (await res.json()) as { error?: { code?: string; message?: string; request_id?: string } }
+    const body = (await res.json()) as {
+      error?: { code?: string; message?: string; request_id?: string; fields?: Record<string, string> }
+    }
     code = body.error?.code ?? code
     message = body.error?.message ?? message
     requestId = body.error?.request_id
+    fields = body.error?.fields
   } catch {
     // Not an envelope (for example a proxy error page); keep the generic message.
   }
-  throw new ApiError(res.status, code, message, requestId)
+  throw new ApiError(res.status, code, message, requestId, fields)
 }
 
 /** GET /api/v1/me: the signed-in user, as established by the Go API. */

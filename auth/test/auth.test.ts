@@ -166,6 +166,34 @@ describe('email verification', () => {
     const { rows } = await h.pool.query('SELECT "emailVerified" FROM auth."user" WHERE email = $1', [e])
     expect(rows).toEqual([{ emailVerified: false }])
   })
+  it.each([
+    ['expired', 'TOKEN_EXPIRED'],
+    ['invalid', 'INVALID_TOKEN'],
+  ])('redirects an %s link to the web page with ?error=%s', async (kind, code) => {
+    const e = email()
+    await h.call('/api/auth/sign-up/email', {
+      body: { email: e, password: PASSWORD, name: 'Ada', callbackURL: '/verify-email' },
+    })
+    const link = new URL(h.mailer.last('verify-email')!.url)
+    expect(link.searchParams.get('callbackURL')).toBe('/verify-email')
+    link.searchParams.set('token', kind === 'expired' ? await mintExpiredVerificationToken(e) : 'not-a-token')
+    const res = await h.call(link.pathname + link.search)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe(`/verify-email?error=${code}`)
+    expect(res.sessionCookie).toBeUndefined()
+  })
+
+  it('redirects a valid link to the web page, signed in', async () => {
+    const e = email()
+    await h.call('/api/auth/sign-up/email', {
+      body: { email: e, password: PASSWORD, name: 'Ada', callbackURL: '/verify-email' },
+    })
+    const link = new URL(h.mailer.last('verify-email')!.url)
+    const res = await h.call(link.pathname + link.search)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/verify-email')
+    expect(res.sessionCookie).toBeDefined()
+  })
 })
 
 describe('sign-in', () => {

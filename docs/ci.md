@@ -27,8 +27,8 @@ passed.
 | **Backend lint** | gofmt would change a file, `go vet` or golangci-lint report issues (config: `backend/.golangci.yml`), or generated sqlc code is stale (`sqlc diff`) |
 | **Backend test** | Any Go test fails (race detector, real PostgreSQL 17 service). This includes `TestMigrateUpDownUp`, which runs goose up → down → up on a fresh database. Also fails if either binary does not build |
 | **Frontend** | Prettier, oxlint, TypeScript (`tsc -b`, strict), Vitest, or the production build fails |
-| **Auth service** | Format, lint, typecheck, unit tests, or Better Auth migrations fail for `auth/`. Until `add-user-auth` creates `auth/`, the job passes with a notice |
-| **Auth contract** | The real auth service and the Go session validator disagree (valid, revoked, expired, tampered sessions). Same pre-auth guard |
+| **Auth service** | Prettier, oxlint, TypeScript, or the Vitest suite (against a real PostgreSQL) fails for `auth/`, or Better Auth migrations fail on a fresh database or are not idempotent |
+| **Auth contract** | The real auth service, the Go `/api/auth` proxy, and the Go session validator disagree: sign-in, sign-out, revoke-all, password change, forced expiry, tampered cookies, unverified users, rate limiting, or reset enumeration (`backend/scripts/auth-contract.sh`) |
 | **Security scans** | gitleaks finds a secret in the full history of the selected branch, govulncheck finds a reachable Go vulnerability, or `pnpm audit --prod` reports a high/critical advisory |
 | **Container image** | The Docker build fails, or Trivy finds a fixable HIGH/CRITICAL vulnerability in the image |
 | **ci-success** | Any job above failed, was cancelled, or was skipped. **This is the one result to check before merging** |

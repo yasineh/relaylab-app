@@ -30,6 +30,17 @@ RelayLab is an event-driven developer platform built for real-time webhook testi
 
 ---
 
+### Implementation in the web app
+
+The tokens live in `web/src/index.css` as CSS variables mapped onto shadcn/ui
+names (`--primary`, `--foreground`, ...). To meet WCAG AA contrast (4.5:1) for
+small text:
+
+- On light backgrounds, status text uses darker shades of the same hue: success `#047857`, warning `#B45309`, error `#DC2626`, muted text `#475569`. The exact brand values stay available as `--brand-success`, `--brand-warning`, and `--brand-error` for icons and fills.
+- On the dark theme, primary buttons use `#3B82F6` (the blue of the dark logo) with Relay Dark Slate text, and error text uses `#F87171`.
+
+---
+
 ## 3. Brand Assets in This Repository
 
 | File | Use |

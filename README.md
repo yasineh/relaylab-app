@@ -7,23 +7,25 @@
 
 A developer workspace to receive, inspect, replay, and debug HTTP webhooks.
 
-> **Status: early development.** The platform foundation is in place: Go API
-> and worker, PostgreSQL with migrations, a React app shell, health checks, and
-> structured logging. Accounts, projects, endpoints, webhook ingestion, the event
-> explorer, and replay are planned and specified but **not implemented yet**.
-> RelayLab is not deployed anywhere.
+> **Status: early development.** The platform foundation and accounts are in
+> place: Go API and worker, PostgreSQL with migrations, health checks,
+> structured logging, and email/password accounts (sign-up, email verification,
+> sign-in, password reset, account settings) through a Better Auth service. Projects,
+> endpoints, webhook ingestion, the event explorer, and replay are planned and
+> specified but **not implemented yet**. RelayLab is not deployed anywhere.
 
 ## Run it locally
 
-Requires pnpm, Node.js 22+, Go 1.27+, and Docker.
+Requires pnpm, Node.js 24+, Go 1.27+, and Docker.
 
 ```sh
 cp .env.example .env
 pnpm install
-pnpm dev        # Postgres + migrations, then web, API, and worker
+pnpm dev        # Postgres + Mailpit + migrations, then web, API, worker, and auth
 ```
 
-Open <http://localhost:5173>. `pnpm test`, `pnpm lint`, and `pnpm build` also
+Open <http://localhost:5173> and create an account at `/sign-up`; the
+verification email arrives in Mailpit at <http://localhost:8025>. `pnpm test`, `pnpm lint`, and `pnpm build` also
 run from the root. See the [development guide](docs/development.md) for all
 commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 
@@ -34,6 +36,8 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 - [Architecture overview](docs/architecture/overview.md) (current implementation)
 - [Database schema](docs/architecture/erd.md)
 - [Brand and design system](docs/design/design-system.md)
+- [API reference](docs/api.md)
+- [Authentication and sessions](docs/security/authentication.md)
 - [MVP plan and decisions](docs/plan/mvp-plan.md)
 - [Specifications](openspec/): planned changes live in `openspec/changes/`
 

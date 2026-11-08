@@ -4,15 +4,16 @@ How to run, test, and work on RelayLab locally. Everything here reflects what is
 implemented today; sections are added as features ship.
 
 Every command runs from the **repository root** through pnpm. The repo is a pnpm
-workspace with two packages: `web` (React app) and `backend` (Go module; its
-`package.json` wraps Go tooling).
+workspace with three packages: `web` (React app), `backend` (Go module; its
+`package.json` wraps Go tooling), and `auth` (the Better Auth service, Node +
+TypeScript).
 
 ## Prerequisites
 
 | Tool | Version | Used for |
 |---|---|---|
 | pnpm | 10+ (repo pins 12.16.1 in `packageManager`) | Workspace commands |
-| Node.js | 22+ (24 recommended) | Web app |
+| Node.js | 24+ (`.nvmrc`) | Web app; the auth service runs its TypeScript directly on Node 24 |
 | Go | 1.27+ | API, worker, backend tests |
 | Docker + Docker Compose | Docker 24+ | Postgres, the test database, sqlc and gitleaks images |
 
@@ -24,17 +25,33 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts Postgres in Docker, applies migrations, then runs three
-processes in parallel with prefixed output:
+`pnpm dev` starts Postgres and Mailpit in Docker, applies the auth and app
+migrations, then runs four processes in parallel with prefixed output:
 
 | Process | What it does | URL |
 |---|---|---|
 | `web dev` | Vite dev server with hot reload. Proxies `/api`, `/h`, `/healthz`, `/readyz` to the API | <http://localhost:5173> |
-| `backend dev:api` | Go HTTP server: `/healthz`, `/readyz`, `/api/v1/*` | <http://localhost:8080> |
+| `backend dev:api` | Go HTTP server: `/healthz`, `/readyz`, `/api/v1/*`, and the `/api/auth/*` proxy | <http://localhost:8080> |
 | `backend dev:worker` | Background worker. No job handlers exist yet; it exposes health only | <http://localhost:8081> |
+| `auth dev` | Better Auth service (restarts on change). Reached only through the API proxy | <http://localhost:3001> (direct requests get 403) |
 
 Open <http://localhost:5173>; the home page shows live API readiness. Press
-Ctrl-C to stop all three. Postgres keeps running; stop it with `pnpm db:down`.
+Ctrl-C to stop all four. Postgres and Mailpit keep running; stop them with
+`pnpm db:down`.
+
+### Your first account
+
+1. Open <http://localhost:5173/sign-up> and create an account (passwords need
+   12–128 characters and must not be common).
+2. Open the Mailpit inbox at <http://localhost:8025> and click the verification
+   link. You are signed in and land on **Projects**.
+
+Or create a verified account from the terminal (works even with sign-up
+disabled); the password is read from stdin without echo:
+
+```sh
+pnpm create-user -- --email you@example.com --name "Your Name"
+```
 
 Run only one side with `pnpm dev:web` or `pnpm dev:backend`.
 
@@ -49,8 +66,10 @@ curl localhost:8080/readyz    # {"status":"ready"}
 pnpm dev:docker   # docker compose up --build
 ```
 
-This runs `postgres`, a one-shot `migrate`, `api`, `worker`, and `web` (Vite in
-a container) from the production image layout.
+This runs `postgres`, `mailpit`, the one-shot `auth-migrate` and `migrate`
+steps (in that order), `auth`, `api`, `worker`, and `web` (Vite in a container)
+from the production image layout. The `auth` container is on the internal
+network only; the API reaches it at `http://auth:3001`.
 
 ### Ports
 
@@ -63,19 +82,25 @@ If a port is taken on your machine, change it in `.env`:
 | `WORKER_HOST_PORT` | 8081 | Worker container port mapping (`pnpm dev` uses `WORKER_HEALTH_ADDR`) |
 | `POSTGRES_HOST_PORT` | 54320 | Dev database |
 | `POSTGRES_TEST_HOST_PORT` | 54321 | Integration-test database |
+| `MAILPIT_SMTP_HOST_PORT` | 1025 | Mailpit SMTP (keep `SMTP_PORT` in sync for `pnpm dev`) |
+| `MAILPIT_UI_HOST_PORT` | 8025 | Mailpit inbox |
+| `AUTH_PORT` | 3001 | Auth service under `pnpm dev` (keep `AUTH_SERVICE_URL` in sync) |
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `pnpm dev` | Postgres + migrations, then web, api and worker with hot reload |
+| `pnpm dev` | Postgres, Mailpit, migrations, then web, api, worker, and auth with hot reload |
+| `pnpm dev:auth` | Only the auth service |
 | `pnpm dev:docker` | The whole stack in Docker Compose |
-| `pnpm db:up` / `pnpm db:down` | Start or stop the dev Postgres container |
-| `pnpm migrate` | Apply migrations with the migrator role |
-| `pnpm test` | Web tests (Vitest + React Testing Library) and Go unit + integration tests |
-| `pnpm lint` | oxlint for web; `go vet` and the gofmt check for backend |
-| `pnpm typecheck` | TypeScript (`tsc -b`) for web |
-| `pnpm format` / `pnpm format:check` | Prettier for web; gofmt for backend |
+| `pnpm db:up` / `pnpm db:down` | Start or stop the dev Postgres and Mailpit containers |
+| `pnpm migrate` | Auth migrations (`auth_migrator`), then app migrations (`app_migrator`) |
+| `pnpm create-user -- --email … --name …` | Create a verified account; password from stdin |
+| `pnpm test` | Web tests, auth service tests, and Go unit + integration tests (including the auth contract tests when Node and `pnpm install` are available) |
+| `pnpm test:contract` | Only the auth contract and auth-schema tests (real auth service + Go proxy and validator) |
+| `pnpm lint` | oxlint for web and auth; `go vet`, gofmt, golangci-lint, and sqlc drift for backend |
+| `pnpm typecheck` | TypeScript for web and auth |
+| `pnpm format` / `pnpm format:check` | Prettier for web and auth; gofmt for backend |
 | `pnpm build` | Production web build and an API binary that embeds it (`backend/bin/`) |
 | `pnpm check` | Format check, lint, typecheck, tests and build: run before pushing |
 | `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
@@ -104,6 +129,21 @@ deployment environment, never a file.
 | `TRUSTED_PROXY_CIDRS` | empty | CIDRs whose `X-Forwarded-For` is trusted. Empty trusts none |
 | `SHUTDOWN_GRACE` | `20s` | Time allowed for in-flight work on SIGTERM |
 
+Authentication and mail ([details](security/authentication.md)):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `BETTER_AUTH_SECRET` | — (required) | Signs session cookies. Shared by the auth service and the API; 32+ characters. Rotating it signs everyone out |
+| `AUTH_PROXY_SHARED_SECRET` | — (required) | Proves requests come from the API proxy; 32+ characters, different from the above |
+| `AUTH_SERVICE_URL` | `http://localhost:3001` | Where the API proxies `/api/auth/*`. Required in production |
+| `AUTH_SIGNUP_ENABLED` | `true`; `false` in production | Public sign-up |
+| `AUTH_REQUIRE_EMAIL_VERIFICATION` | `true` | Users must verify their email before signing in |
+| `AUTH_DATABASE_URL` | — (required by auth) | Auth service connection as `auth_runtime` |
+| `AUTH_MIGRATION_DATABASE_URL` | — | Auth migrations as `auth_migrator` |
+| `AUTH_PORT` | `3001` | Auth service listen port |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | — | Mail server. Required in production. Without `SMTP_HOST` outside production, emails are only logged as captured, not delivered |
+| `MAIL_FROM` | `RelayLab <no-reply@relaylab.localhost>` | Sender address. Quote it in `.env` because of the `<` |
+
 The processes refuse to start when a variable is missing or malformed. The error
 names the variable but never prints its value.
 
@@ -118,26 +158,29 @@ value is hard-coded anywhere else.
 |---|---|---|
 | `LIMIT_HTTP_MAX_HEADER_BYTES` | 32768 | Larger request headers get `431 headers_too_large` |
 | `LIMIT_API_MAX_BODY_BYTES` | 65536 | Larger `/api` bodies get `413 body_too_large` |
+| `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` | 10 | Proxied `/api/auth` requests that take longer get `504 auth_timeout` |
 
 ## Database: schemas, roles, migrations
 
-RelayLab keeps its tables in the `app` schema. The `auth` schema is reserved for
-the Better Auth service (added in `add-user-auth`) and is currently empty.
+RelayLab keeps its tables in the `app` schema. The `auth` schema belongs to the
+Better Auth service (users, sessions, credentials); see the
+[ERD](architecture/erd.md).
 
 | Role | Can do | Used by |
 |---|---|---|
-| `app_migrator` | DDL on `app` | `pnpm migrate` |
-| `app_runtime` | Read/write data in `app`; no DDL | API and worker |
-| `auth_migrator` | DDL on `auth` | Better Auth migrations (later) |
-| `auth_runtime` | Read/write data in `auth` | Better Auth service (later) |
+| `app_migrator` | DDL on `app` | `pnpm migrate` (goose) |
+| `app_runtime` | Read/write data in `app`; read `auth."session"` and `auth."user"`; no DDL | API and worker |
+| `auth_migrator` | DDL on `auth` | `pnpm migrate` (Better Auth migrations) |
+| `auth_runtime` | Read/write data in `auth` | Auth service |
 
 `deploy/sql/roles.sql` creates these schemas, roles, and grants idempotently.
 It reads role passwords from `relaylab.*_password` session settings, so the file
 itself never contains secrets. The dev Postgres container runs it on first start
 via `deploy/local/initdb/00_roles.sh`.
 
-Migrations are goose SQL files in `backend/migrations/`, embedded into the API
-binary. goose keeps its version table in `app.goose_db_version`. `/readyz`
+`pnpm migrate` runs the Better Auth migrations first (they also grant
+`app_runtime` its read access), then the app migrations. App migrations are
+goose SQL files in `backend/migrations/`, embedded into the API binary. goose keeps its version table in `app.goose_db_version`. `/readyz`
 returns 503 until the database is reachable and every embedded migration is
 applied.
 
@@ -151,13 +194,24 @@ migrations. It uses the pinned `sqlc/sqlc` Docker image.
 
 ## Tests
 
-`pnpm test` runs both suites. Go integration tests use a separate
-`postgres-test` container (Compose profile `test`, port 54321, in-memory
-storage), which the backend test script starts automatically. Each test creates
-and drops its own database. Postgres roles are shared across a whole server, so
-tests never point at the dev database server. With `RELAYLAB_REQUIRE_DB=1`, set
-by the script, database tests fail instead of skipping when no database is
-available.
+`pnpm test` runs all three suites. The Go and auth integration tests use a
+separate `postgres-test` container (Compose profile `test`, port 54321,
+in-memory storage), which the test scripts start automatically. Each test file
+creates and drops its own database. Postgres roles are shared across a whole
+server, so tests never point at the dev database server, and concurrent suites
+serialise role setup with an advisory lock. With `RELAYLAB_REQUIRE_DB=1`, set
+by the scripts, database tests fail instead of skipping.
+
+| Suite | What it covers |
+|---|---|
+| `web` | Components, forms, route guard, session-expiry handling. `fetch` is mocked; unmocked requests fail the test |
+| `auth` | Better Auth configuration against a real database: sign-up, verification, sign-in, reset, rate limits, migrations and grants, the operator CLI, and credential-free logs |
+| `backend` | Handlers, middleware, session validation, the auth proxy, and database integration |
+| Auth contract (`pnpm test:contract`) | The real auth service behind the real Go proxy and validator: valid, signed-out, revoked, expired, tampered, and unverified sessions; rate limiting and enumeration through the proxy |
+
+The contract tests need Node.js and `pnpm install`. They skip without them,
+unless `RELAYLAB_REQUIRE_AUTH=1` (set by `pnpm test:contract` and the CI
+`auth-contract` job).
 
 ## Logging and errors
 
@@ -183,7 +237,11 @@ backend/                            Go module `relaylab`
   internal/webui                    serves the embedded web build (`-tags embedweb`)
   migrations/                       goose SQL migrations (app schema)
   db/queries/                       sqlc queries
-  scripts/                          env loader and test runner used by package scripts
+  internal/identity                 session validation, /api/auth proxy, /api/v1/me
+  scripts/                          env loader and test runners used by package scripts
+auth/                               Better Auth service (Node 24, TypeScript)
+  src/                              server, Better Auth config, mailer, migrate, CLIs
+  test/                             integration tests against a real database
 web/                                React + TypeScript + Vite app
 deploy/                             roles.sql and local Postgres init
 openspec/                           specifications and planned changes

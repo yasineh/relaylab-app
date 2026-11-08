@@ -1,8 +1,8 @@
 # Continuous integration
 
 CI runs on GitHub Actions (`.github/workflows/ci.yml`) **only when someone
-starts it manually**. Pushes, pull requests, and Dependabot PRs do not trigger
-it. A newer manual run on the same branch cancels an older one that is still
+starts it manually**, on every branch including `main`. Pushes, pull requests,
+and Dependabot pull requests never trigger it. A newer manual run on the same branch cancels an older one that is still
 running.
 
 ## Run CI
@@ -39,9 +39,12 @@ passed.
 - Triggered only by `workflow_dispatch`, which requires write access to the repository. There is no `pull_request_target`.
 - No repository secrets are used. The Postgres service uses throwaway,
   non-secret test credentials.
-- Third-party actions are pinned to full commit SHAs. Dependabot
-  (`.github/dependabot.yml`) proposes weekly updates for Go modules, the pnpm
-  workspace, and the pinned actions.
+- Third-party actions are pinned to full commit SHAs.
+- There are no scheduled dependency updates. GitHub **Dependabot security
+  updates** are enabled in the repository settings: when an advisory affects a
+  dependency (Go modules, the pnpm workspace, or the pinned actions), Dependabot
+  opens a pull request. It runs no tests; start CI on its branch manually
+  before merging. Other version bumps are done by hand.
 - Tool versions are pinned in the workflow `env` block: golangci-lint,
   govulncheck, sqlc, gitleaks, Trivy.
 
@@ -83,6 +86,6 @@ still require pull requests before merging and block force pushes to `main`.
 
 ## Updating pinned versions
 
-- **Actions:** accept Dependabot PRs, which update both the SHA and the version comment.
+- **Actions:** update the commit SHA and the version comment together (Dependabot security PRs do this for you).
 - **Tool images and versions:** change them in the workflow `env` block and the
   matching root or backend `package.json` script, so local and CI stay identical.

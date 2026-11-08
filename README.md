@@ -1,4 +1,9 @@
-# RelayLab
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/src/assets/brand/logo-horizontal-dark.svg">
+    <img src="web/src/assets/brand/logo-horizontal-light.svg" alt="RelayLab" width="300">
+  </picture>
+</h1>
 
 A developer workspace to receive, inspect, replay, and debug HTTP webhooks.
 

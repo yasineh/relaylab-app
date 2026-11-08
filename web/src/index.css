@@ -3,50 +3,62 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Design tokens (shadcn/ui conventions). Light theme by default; dark follows
-   the OS preference or an explicit .dark class on <html>. */
+/* Design tokens: RelayLab brand palette (docs/design/design-system.md) mapped onto
+   shadcn/ui conventions. Light theme by default; dark follows the OS preference
+   or an explicit .dark class on <html>.
+
+   Brand hex values: RelayLab Blue #2563EB, Relay Dark Slate #0F172A, Lab Gray
+   #64748B, Canvas #F8FAFC, Surface Dark #1E293B, Success #10B981, Warning
+   #F59E0B, Error #EF4444. Status colours used for small text on light
+   backgrounds use a darker shade of the same hue to meet WCAG AA (4.5:1);
+   the exact brand values remain for icons, fills, and the dark theme. */
 :root {
   --radius: 0.5rem;
-  --background: oklch(0.99 0 0);
-  --foreground: oklch(0.18 0.01 260);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.01 260);
-  --muted: oklch(0.96 0.005 260);
-  --muted-foreground: oklch(0.46 0.01 260);
-  --border: oklch(0.91 0.005 260);
-  --input: oklch(0.91 0.005 260);
-  --ring: oklch(0.55 0.15 255);
-  --primary: oklch(0.5 0.17 255);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.96 0.005 260);
-  --secondary-foreground: oklch(0.22 0.01 260);
-  --accent: oklch(0.95 0.02 255);
-  --accent-foreground: oklch(0.22 0.01 260);
-  --destructive: oklch(0.55 0.2 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.55 0.13 150);
+  --background: #f8fafc; /* Canvas */
+  --foreground: #0f172a; /* Relay Dark Slate */
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #475569; /* Lab Gray, one step darker for AA on Canvas */
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #2563eb;
+  --primary: #2563eb; /* RelayLab Blue */
+  --primary-foreground: #ffffff;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --accent: #eff6ff;
+  --accent-foreground: #1e3a8a;
+  --destructive: #dc2626; /* Error #EF4444, AA text shade */
+  --destructive-foreground: #ffffff;
+  --success: #047857; /* Success #10B981, AA text shade */
+  --warning: #b45309; /* Warning #F59E0B, AA text shade */
+  --brand-success: #10b981;
+  --brand-warning: #f59e0b;
+  --brand-error: #ef4444;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --background: oklch(0.16 0.01 260);
-    --foreground: oklch(0.95 0.005 260);
-    --card: oklch(0.2 0.01 260);
-    --card-foreground: oklch(0.95 0.005 260);
-    --muted: oklch(0.24 0.01 260);
-    --muted-foreground: oklch(0.7 0.01 260);
-    --border: oklch(0.3 0.01 260);
-    --input: oklch(0.3 0.01 260);
-    --ring: oklch(0.68 0.14 255);
-    --primary: oklch(0.68 0.14 255);
-    --primary-foreground: oklch(0.16 0.01 260);
-    --secondary: oklch(0.26 0.01 260);
-    --secondary-foreground: oklch(0.95 0.005 260);
-    --accent: oklch(0.28 0.03 255);
-    --accent-foreground: oklch(0.95 0.005 260);
-    --destructive: oklch(0.62 0.19 27);
-    --destructive-foreground: oklch(0.99 0 0);
-    --success: oklch(0.7 0.13 150);
+    --background: #0f172a; /* Relay Dark Slate */
+    --foreground: #f8fafc;
+    --card: #1e293b; /* Surface Dark */
+    --card-foreground: #f8fafc;
+    --muted: #1e293b;
+    --muted-foreground: #94a3b8;
+    --border: #334155;
+    --input: #475569;
+    --ring: #3b82f6;
+    --primary: #3b82f6; /* brand blue as used on dark in logo-horizontal-dark.svg */
+    --primary-foreground: #0f172a; /* white on #3B82F6 is 3.7:1; slate meets AA */
+    --secondary: #1e293b;
+    --secondary-foreground: #f8fafc;
+    --accent: #172554;
+    --accent-foreground: #dbeafe;
+    --destructive: #f87171; /* Error #EF4444 is 3.9:1 on Surface Dark; lighter shade meets AA */
+    --destructive-foreground: #0f172a;
+    --success: #10b981;
+    --warning: #f59e0b;
   }
 }
 
@@ -72,7 +84,11 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-warning: var(--warning);
+  --color-brand-success: var(--brand-success);
+  --color-brand-warning: var(--brand-warning);
+  --color-brand-error: var(--brand-error);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
 }
 

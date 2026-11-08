@@ -11,3 +11,67 @@ export async function fetchReadiness(signal?: AbortSignal): Promise<Readiness> {
   }
   return (await res.json()) as Readiness
 }
+
+/** An API error in the standard envelope: `{ error: { code, message, request_id } }`. */
+export class ApiError extends Error {
+  readonly status: number
+  readonly code: string
+  readonly requestId: string | undefined
+
+  constructor(status: number, code: string, message: string, requestId?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.requestId = requestId
+  }
+}
+
+export function isApiError(err: unknown): err is ApiError {
+  return err instanceof ApiError
+}
+
+/**
+ * Calls the RelayLab API on the same origin. The session cookie is sent
+ * automatically. Bodies are JSON; non-2xx responses become {@link ApiError}.
+ */
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers)
+  headers.set('Accept', 'application/json')
+  if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  const res = await fetch(path, { ...init, headers, credentials: 'same-origin' })
+  if (res.ok) {
+    if (res.status === 204) return undefined as T
+    return (await res.json()) as T
+  }
+  let code = 'http_error'
+  let message = 'Something went wrong. Try again.'
+  let requestId: string | undefined
+  try {
+    const body = (await res.json()) as { error?: { code?: string; message?: string; request_id?: string } }
+    code = body.error?.code ?? code
+    message = body.error?.message ?? message
+    requestId = body.error?.request_id
+  } catch {
+    // Not an envelope (for example a proxy error page); keep the generic message.
+  }
+  throw new ApiError(res.status, code, message, requestId)
+}
+
+/** GET /api/v1/me: the signed-in user, as established by the Go API. */
+export type Me = {
+  id: string
+  email: string
+  name: string
+  email_verified: boolean
+}
+
+/** GET /api/v1/config: public settings the UI needs before sign-in. */
+export type PublicConfig = {
+  signup_enabled: boolean
+  email_verification_required: boolean
+}
+
+export const fetchMe = (signal?: AbortSignal) => apiFetch<Me>('/api/v1/me', { signal })
+export const fetchPublicConfig = (signal?: AbortSignal) =>
+  apiFetch<PublicConfig>('/api/v1/config', { signal })

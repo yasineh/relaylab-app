@@ -151,6 +151,7 @@ describe('account settings', () => {
       const { router } = renderApp('/settings/account')
       const danger = await waitFor(() => section('Delete account'))
       expect(within(danger).queryByLabelText('Password')).not.toBeInTheDocument()
+      expect(danger).toHaveTextContent('including all projects and their events')
 
       await userEvent.click(within(danger).getByRole('button', { name: 'Delete account…' }))
       await userEvent.click(within(danger).getByRole('button', { name: 'Permanently delete account' }))

@@ -283,6 +283,64 @@ describe('sessions', () => {
   })
 })
 
+describe('account isolation and deletion', () => {
+  it('updates only the caller even when the body names another user', async () => {
+    const victim = email()
+    await h.signUpVerified(victim, PASSWORD, 'Victim')
+    const { rows: v } = await h.pool.query('SELECT id FROM auth."user" WHERE email = $1', [victim])
+    const victimId = v[0].id as string
+
+    const attacker = email()
+    const cookie = await h.signUpVerified(attacker, PASSWORD, 'Attacker')
+    const res = await h.call('/api/auth/update-user', {
+      body: { name: 'Renamed', id: victimId, userId: victimId },
+      cookie,
+    })
+    expect(res.status).toBe(200)
+    // Email cannot be changed here at all (not supported in the MVP).
+    const emailChange = await h.call('/api/auth/update-user', { body: { name: 'X', email: victim }, cookie })
+    expect(emailChange.status).toBe(400)
+    const { rows } = await h.pool.query(
+      'SELECT email, name FROM auth."user" WHERE email = ANY($1) ORDER BY name',
+      [[victim, attacker]],
+    )
+    expect(rows).toEqual([
+      { email: attacker, name: 'Renamed' },
+      { email: victim, name: 'Victim' },
+    ])
+  })
+
+  it('does not delete the account with a wrong password', async () => {
+    const e = email()
+    const cookie = await h.signUpVerified(e, PASSWORD)
+    const res = await h.call('/api/auth/delete-user', { body: { password: 'not-the-password-1' }, cookie })
+    expect(res.status).toBe(400)
+    const { rowCount } = await h.pool.query('SELECT 1 FROM auth."user" WHERE email = $1', [e])
+    expect(rowCount).toBe(1)
+  })
+
+  it('deletes the user, sessions, and credentials with the correct password', async () => {
+    const e = email()
+    const cookie = await h.signUpVerified(e, PASSWORD)
+    const other = (await h.call('/api/auth/sign-in/email', { body: { email: e, password: PASSWORD } }))
+      .sessionCookie!
+    const { rows } = await h.pool.query('SELECT id FROM auth."user" WHERE email = $1', [e])
+    const id = rows[0].id as string
+
+    const res = await h.call('/api/auth/delete-user', { body: { password: PASSWORD }, cookie })
+    expect(res.status).toBe(200)
+    expect(res.setCookies.some((c) => /session_token=;/.test(c) && /Max-Age=0/i.test(c))).toBe(true)
+    for (const t of ['user', 'session', 'account']) {
+      const col = t === 'user' ? 'id' : '"userId"'
+      const { rowCount } = await h.pool.query(`SELECT 1 FROM auth."${t}" WHERE ${col} = $1`, [id])
+      expect({ table: t, rows: rowCount }).toEqual({ table: t, rows: 0 })
+    }
+    expect((await h.call('/api/auth/get-session', { cookie: other })).body).toBeNull()
+    const again = await h.call('/api/auth/sign-in/email', { body: { email: e, password: PASSWORD } })
+    expect(again.status).toBe(401)
+  })
+})
+
 describe('production cookie', () => {
   it('uses the __Secure- prefix and the Secure attribute', async () => {
     const prod = await startAuth(db, { env: 'production', appOrigin: 'https://relaylab.example.test' })

@@ -243,7 +243,7 @@ function DeleteAccountSection() {
     <Section
       tone="danger"
       title="Delete account"
-      description="Permanently deletes your account and signs you out everywhere. This cannot be undone."
+      description="Permanently deletes your account and everything it owns, including all projects and their events, and signs you out everywhere. This cannot be undone."
     >
       {!open ? (
         <Button variant="destructive" onClick={() => setOpen(true)}>
@@ -270,7 +270,7 @@ function DeleteAccountSection() {
                 {...form.register('confirmed')}
               />
               <label htmlFor={checkboxId} className="text-sm">
-                I understand that my account will be permanently deleted.
+                I understand that my account, projects, and events will be permanently deleted.
               </label>
             </div>
             {errors.confirmed ? (

@@ -1,7 +1,10 @@
 #!/bin/sh
-# Local development only: runs once when the Postgres container initialises an
-# empty data directory. Applies deploy/sql/roles.sql (mounted at /deploy-sql)
+# Local development only. Applies deploy/sql/roles.sql (mounted at /deploy-sql)
 # with role passwords taken from the container environment (.env placeholders).
+# Runs automatically when the Postgres container initialises an empty data
+# directory, and again before every migrate (`pnpm db:roles`, and the compose
+# `db-roles` service), so role and grant changes reach existing databases.
+# roles.sql is idempotent.
 set -eu
 
 : "${APP_MIGRATOR_PASSWORD:?}" "${APP_RUNTIME_PASSWORD:?}" "${AUTH_MIGRATOR_PASSWORD:?}" "${AUTH_RUNTIME_PASSWORD:?}"

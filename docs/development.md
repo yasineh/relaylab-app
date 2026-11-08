@@ -25,8 +25,8 @@ pnpm install
 pnpm dev
 ```
 
-`pnpm dev` starts Postgres and Mailpit in Docker, applies the auth and app
-migrations, then runs four processes in parallel with prefixed output:
+`pnpm dev` starts Postgres and Mailpit in Docker, re-applies the roles and
+grants, applies the auth and app migrations, then runs four processes in parallel with prefixed output:
 
 | Process | What it does | URL |
 |---|---|---|
@@ -66,8 +66,8 @@ curl localhost:8080/readyz    # {"status":"ready"}
 pnpm dev:docker   # docker compose up --build
 ```
 
-This runs `postgres`, `mailpit`, the one-shot `auth-migrate` and `migrate`
-steps (in that order), `auth`, `api`, `worker`, and `web` (Vite in a container)
+This runs `postgres`, `mailpit`, the one-shot `db-roles`, `auth-migrate`, and
+`migrate` steps (in that order), `auth`, `api`, `worker`, and `web` (Vite in a container)
 from the production image layout. The `auth` container is on the internal
 network only; the API reaches it at `http://auth:3001`.
 
@@ -94,6 +94,7 @@ If a port is taken on your machine, change it in `.env`:
 | `pnpm dev:auth` | Only the auth service |
 | `pnpm dev:docker` | The whole stack in Docker Compose |
 | `pnpm db:up` / `pnpm db:down` | Start or stop the dev Postgres and Mailpit containers |
+| `pnpm db:roles` | Re-apply `deploy/sql/roles.sql` (roles, schemas, grants) to the dev database |
 | `pnpm migrate` | Auth migrations (`auth_migrator`), then app migrations (`app_migrator`) |
 | `pnpm create-user -- --email … --name …` | Create a verified account; password from stdin |
 | `pnpm test` | Web tests, auth service tests, and Go unit + integration tests (including the auth contract tests when Node and `pnpm install` are available) |
@@ -191,14 +192,11 @@ missing.
 
 To reset the dev database, run `docker compose down -v` (deletes the volume), then `pnpm dev`.
 
-`deploy/sql/roles.sql` runs only when the dev database volume is first created.
-If your local database predates a change to it (for example `add-project-management`
-gave `app_migrator` `USAGE` on schema `auth`), either reset as above or apply the
-grant once:
-
-```sh
-docker compose exec postgres psql -U postgres -d relaylab -c 'GRANT USAGE ON SCHEMA auth TO app_migrator;'
-```
+`deploy/sql/roles.sql` is idempotent and is re-applied before every migrate:
+`pnpm dev` and `pnpm dev:backend` run `pnpm db:roles`, and Docker Compose runs a
+one-shot `db-roles` service before the migrations. Role and grant changes
+therefore reach an existing local database without resetting it. Run
+`pnpm db:roles` yourself before `pnpm migrate` if you migrate by hand.
 
 ### SQL code generation
 

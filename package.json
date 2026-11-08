@@ -8,13 +8,14 @@
     "pnpm": ">=10"
   },
   "scripts": {
-    "dev": "pnpm db:up && pnpm migrate && pnpm -r --parallel run \"/^dev(:api|:worker)?$/\"",
+    "dev": "pnpm db:up && pnpm db:roles && pnpm migrate && pnpm -r --parallel run \"/^dev(:api|:worker)?$/\"",
     "dev:web": "pnpm --filter @relaylab/web dev",
-    "dev:backend": "pnpm db:up && pnpm migrate && pnpm --filter @relaylab/backend --parallel run \"/^dev:(api|worker)$/\"",
+    "dev:backend": "pnpm db:up && pnpm db:roles && pnpm migrate && pnpm --filter @relaylab/backend --parallel run \"/^dev:(api|worker)$/\"",
     "dev:auth": "pnpm --filter @relaylab/auth dev",
     "dev:docker": "docker compose up --build",
     "db:up": "docker compose up -d --wait postgres mailpit",
     "db:down": "docker compose down",
+    "db:roles": "docker compose exec -T postgres sh /docker-entrypoint-initdb.d/00_roles.sh",
     "migrate": "pnpm --filter @relaylab/auth migrate && pnpm --filter @relaylab/backend migrate",
     "create-user": "pnpm --filter @relaylab/auth create-user",
     "build": "pnpm --filter @relaylab/web build && pnpm --filter @relaylab/backend build:embed",

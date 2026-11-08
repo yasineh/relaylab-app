@@ -13,7 +13,10 @@ type Limits struct {
 	// HTTPMaxHeaderBytes caps the total size of request headers (431 when exceeded).
 	HTTPMaxHeaderBytes int
 	// APIMaxBodyBytes caps dashboard JSON request bodies (413 when exceeded).
+	// It also caps bodies proxied to the auth service under /api/auth.
 	APIMaxBodyBytes int
+	// AuthProxyTimeoutSeconds bounds a proxied /api/auth request end to end (502/504 when exceeded).
+	AuthProxyTimeoutSeconds int
 }
 
 type limitSpec struct {
@@ -36,6 +39,12 @@ var limitSpecs = []limitSpec{
 		def:  64 << 10,
 		doc:  "Maximum dashboard API JSON body size in bytes",
 		bind: func(l *Limits) *int { return &l.APIMaxBodyBytes },
+	},
+	{
+		env:  "LIMIT_AUTH_PROXY_TIMEOUT_SECONDS",
+		def:  10,
+		doc:  "Maximum time for a request proxied to the auth service, in seconds",
+		bind: func(l *Limits) *int { return &l.AuthProxyTimeoutSeconds },
 	},
 }
 

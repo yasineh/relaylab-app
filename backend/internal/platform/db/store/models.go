@@ -3,3 +3,28 @@
 //   sqlc v1.27.0
 
 package store
+
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type AuthSession struct {
+	ID        string
+	ExpiresAt pgtype.Timestamptz
+	Token     string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	IpAddress pgtype.Text
+	UserAgent pgtype.Text
+	UserId    string
+}
+
+type AuthUser struct {
+	ID            string
+	Name          string
+	Email         string
+	EmailVerified bool
+	Image         pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}

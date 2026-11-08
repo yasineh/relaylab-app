@@ -36,6 +36,9 @@ type DB struct {
 	AdminURL    string // superuser connection to this database
 	MigratorURL string // app_migrator
 	RuntimeURL  string // app_runtime
+
+	AuthMigratorURL string // auth_migrator (Better Auth migrations)
+	AuthRuntimeURL  string // auth_runtime (auth service)
 }
 
 // New creates an isolated database, applies deploy/sql/roles.sql, and drops it
@@ -81,6 +84,9 @@ func New(t testing.TB) *DB {
 		AdminURL:    withDB(t, base, name, "", ""),
 		MigratorURL: withDB(t, base, name, "app_migrator", MigratorPassword),
 		RuntimeURL:  withDB(t, base, name, "app_runtime", RuntimePassword),
+
+		AuthMigratorURL: withDB(t, base, name, "auth_migrator", AuthMigratorPassword),
+		AuthRuntimeURL:  withDB(t, base, name, "auth_runtime", AuthRuntimePassword),
 	}
 
 	// Roles are cluster-wide: serialise role DDL across parallel test packages.
@@ -115,6 +121,11 @@ func ApplyRoles(ctx context.Context, adminURL string) error {
 	}
 	_, err = c.Exec(ctx, string(script))
 	return err
+}
+
+// RepoRoot returns the repository root (the directory containing deploy/sql/roles.sql).
+func RepoRoot() string {
+	return filepath.Dir(filepath.Dir(filepath.Dir(RolesScriptPath())))
 }
 
 // RolesScriptPath locates deploy/sql/roles.sql by walking up from the working

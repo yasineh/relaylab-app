@@ -13,9 +13,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"relaylab/internal/identity"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db"
+	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
 	"relaylab/internal/platform/logging"
@@ -59,6 +62,12 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	authCfg, err := config.LoadAuth(os.Getenv, cfg.Env)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
 	logger := logging.New(os.Stdout, "api", string(cfg.Env), cfg.LogLevel)
 	slog.SetDefault(logger)
 
@@ -79,7 +88,20 @@ func runServer() int {
 	}
 	checker := health.New(dbCheck, migCheck)
 
-	handler := newRouter(routerDeps{cfg: cfg, logger: logger, health: checker, web: webHandler()})
+	handler := newRouter(routerDeps{
+		cfg:       cfg,
+		auth:      authCfg,
+		logger:    logger,
+		health:    checker,
+		validator: identity.NewValidator(authCfg, store.New(pool)),
+		authProxy: identity.NewAuthProxy(identity.ProxyOptions{
+			Target:      authCfg.ServiceURL,
+			Secret:      authCfg.ProxySharedSecret,
+			Timeout:     time.Duration(cfg.Limits.AuthProxyTimeoutSeconds) * time.Second,
+			ForwardedTo: cfg.AppOrigin.Scheme,
+		}),
+		web: webHandler(),
+	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.HTTPAddr)

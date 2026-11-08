@@ -4,9 +4,12 @@ title = "RelayLab gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Dependencies and build output are not project sources"
+description = "Dependencies, build output, and synthetic test fixtures"
 paths = [
   '''(^|/)node_modules/''',
   '''(^|/)dist/''',
   '''(^|/)backend/bin/''',
+  # Auth service tests use made-up passphrases (12+ characters, high entropy so they
+  # pass the password rules) against throwaway databases. They are not credentials.
+  '''(^|/)auth/test/''',
 ]

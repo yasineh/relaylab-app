@@ -9,6 +9,9 @@ import (
 )
 
 type Querier interface {
+	// The only query Go runs against Better Auth's tables: read-only session lookup
+	// by the token from a signature-verified cookie (design decision 2, option A).
+	GetSessionByToken(ctx context.Context, token string) (GetSessionByTokenRow, error)
 	// Readiness probe: a trivial round trip using the runtime role.
 	Ping(ctx context.Context) (int32, error)
 }

@@ -2,20 +2,66 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"relaylab/internal/identity"
 	"relaylab/internal/platform/config"
+	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
 	"relaylab/internal/webui"
 )
 
+//nolint:gosec // G101: test-only values.
+const (
+	testSessionSecret = "test-only-better-auth-secret-0123456789abcdef"
+	testProxySecret   = "test-only-proxy-shared-secret-0123456789abcdef"
+	testToken         = "OSsmUnAfkn3ueRXSDK8HJVOqRyNbSGO7"
+	appOrigin         = "http://localhost:5173"
+)
+
+// sessionStore is an in-memory stand-in for the auth."session" lookup.
+type sessionStore map[string]store.GetSessionByTokenRow
+
+func (s sessionStore) GetSessionByToken(_ context.Context, token string) (store.GetSessionByTokenRow, error) {
+	if r, ok := s[token]; ok {
+		return r, nil
+	}
+	return store.GetSessionByTokenRow{}, pgx.ErrNoRows
+}
+
+// validCookie is a correctly signed session cookie for testToken (user u1).
+func validCookie() *http.Cookie {
+	mac := hmac.New(sha256.New, []byte(testSessionSecret))
+	mac.Write([]byte(testToken))
+	v := testToken + "." + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return &http.Cookie{Name: config.SessionCookieDev, Value: url.QueryEscape(v)}
+}
+
+type routerOpts struct {
+	web      http.Handler
+	upstream http.Handler // fake auth service
+}
+
 func testRouter(t *testing.T, web http.Handler) http.Handler {
+	t.Helper()
+	return testRouterWith(t, routerOpts{web: web})
+}
+
+func testRouterWith(t *testing.T, o routerOpts) http.Handler {
 	t.Helper()
 	cfg, err := config.Load(func(k string) string {
 		return map[string]string{"DATABASE_URL": "postgres://u:p@localhost/db"}[k]
@@ -23,8 +69,56 @@ func testRouter(t *testing.T, web http.Handler) http.Handler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	authCfg, err := config.LoadAuth(func(k string) string {
+		return map[string]string{"BETTER_AUTH_SECRET": testSessionSecret, "AUTH_PROXY_SHARED_SECRET": testProxySecret}[k]
+	}, cfg.Env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := o.upstream
+	if upstream == nil {
+		upstream = http.NotFoundHandler()
+	}
+	up := httptest.NewServer(upstream)
+	t.Cleanup(up.Close)
+	target, _ := url.Parse(up.URL)
+
+	sessions := sessionStore{testToken: {
+		UserID:        "u1",
+		ExpiresAt:     pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		Email:         "u1@example.test",
+		Name:          "User One",
+		EmailVerified: true,
+	}}
 	ok := func(context.Context) error { return nil }
-	return newRouter(routerDeps{cfg: cfg, logger: slog.New(slog.DiscardHandler), health: health.New(ok, ok), web: web})
+	return newRouter(routerDeps{
+		cfg:       cfg,
+		auth:      authCfg,
+		logger:    slog.New(slog.DiscardHandler),
+		health:    health.New(ok, ok),
+		validator: identity.NewValidator(authCfg, sessions),
+		authProxy: identity.NewAuthProxy(identity.ProxyOptions{
+			Target: target, Secret: authCfg.ProxySharedSecret, Timeout: 5 * time.Second, ForwardedTo: "http",
+		}),
+		web: o.web,
+	})
+}
+
+func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Code      string `json:"code"`
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("not an error envelope: %s", rec.Body)
+	}
+	if body.Error.RequestID == "" {
+		t.Errorf("error envelope without request_id: %s", rec.Body)
+	}
+	return body.Error.Code
 }
 
 var fakeSPA = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -36,7 +130,9 @@ func TestUnknownAPIPathReturnsJSON404(t *testing.T) {
 	h := testRouter(t, fakeSPA)
 	for _, p := range []string{"/api/v1/unknown", "/api/other", "/h/sometoken"} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		req := httptest.NewRequest(http.MethodGet, p, nil)
+		req.AddCookie(validCookie())
+		h.ServeHTTP(rec, req)
 		var body struct {
 			Error struct{ Code, RequestID string }
 		}
@@ -81,6 +177,9 @@ func TestHealthRoutesMounted(t *testing.T) {
 func TestAPIBodyLimit(t *testing.T) {
 	h := testRouter(t, nil)
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/anything", strings.NewReader(strings.Repeat("x", 70*1024)))
+	req.Header.Set("Origin", appOrigin)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(validCookie())
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -100,7 +199,9 @@ func TestEmbeddedWebAppAndAPI404(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/unknown", nil))
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/unknown", nil)
+	req.AddCookie(validCookie())
+	h.ServeHTTP(rec, req)
 	if rec.Code != 404 || rec.Header().Get("Content-Type") != "application/json" {
 		t.Fatalf("/api/v1/unknown: %d %s", rec.Code, rec.Body)
 	}

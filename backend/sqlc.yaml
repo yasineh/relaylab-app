@@ -3,6 +3,7 @@ sql:
   - engine: postgresql
     schema:
       - db/sqlc/00_schemas.sql
+      - db/sqlc/10_auth_tables.sql
       - migrations
     queries: db/queries
     gen:

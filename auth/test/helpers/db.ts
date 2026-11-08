@@ -56,11 +56,26 @@ function withDb(base: string, name: string, role?: Role): string {
  * serialise on an advisory lock held on the shared base database (advisory locks
  * are per database, so the lock must not be taken in the per-test database).
  */
-export async function applyRoles(adminUrl: string): Promise<void> {
+/**
+ * Runs fn while holding the cluster-wide advisory lock that serialises role and
+ * grant changes. Advisory locks are per database, so it is taken on the shared
+ * base database; the Go suites use the same key (727001).
+ */
+export async function withRoleLock<T>(fn: () => Promise<T>): Promise<T> {
   const lock = new Client({ connectionString: testDatabaseUrl() })
   await lock.connect()
   try {
     await lock.query('SELECT pg_advisory_lock($1)', [ROLE_LOCK])
+    return await fn()
+  } finally {
+    await lock.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]).catch(() => {})
+    await lock.end()
+  }
+}
+
+/** Applies deploy/sql/roles.sql under the role lock (roles are cluster-wide). */
+export async function applyRoles(adminUrl: string): Promise<void> {
+  await withRoleLock(async () => {
     const c = new Client({ connectionString: adminUrl })
     await c.connect()
     try {
@@ -71,22 +86,22 @@ export async function applyRoles(adminUrl: string): Promise<void> {
     } finally {
       await c.end()
     }
-  } finally {
-    await lock.query('SELECT pg_advisory_unlock($1)', [ROLE_LOCK]).catch(() => {})
-    await lock.end()
-  }
+  })
 }
 
 export async function createTestDatabase(): Promise<TestDatabase> {
   const base = testDatabaseUrl()
   const name = `relaylab_auth_test_${randomBytes(6).toString('hex')}`
-  const admin = new Client({ connectionString: base })
-  await admin.connect()
-  try {
-    await admin.query(`CREATE DATABASE "${name}"`)
-  } finally {
-    await admin.end()
-  }
+  // CREATE/DROP DATABASE touch shared catalogs too: run them under the role lock.
+  await withRoleLock(async () => {
+    const admin = new Client({ connectionString: base })
+    await admin.connect()
+    try {
+      await admin.query(`CREATE DATABASE "${name}"`)
+    } finally {
+      await admin.end()
+    }
+  })
   const adminUrl = withDb(base, name)
   await applyRoles(adminUrl)
   return {
@@ -94,13 +109,15 @@ export async function createTestDatabase(): Promise<TestDatabase> {
     adminUrl,
     url: (role) => withDb(base, name, role),
     async drop() {
-      const c = new Client({ connectionString: base })
-      await c.connect()
-      try {
-        await c.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`)
-      } finally {
-        await c.end()
-      }
+      await withRoleLock(async () => {
+        const c = new Client({ connectionString: base })
+        await c.connect()
+        try {
+          await c.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`)
+        } finally {
+          await c.end()
+        }
+      })
     },
   }
 }

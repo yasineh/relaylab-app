@@ -9,7 +9,7 @@ import { createLogger } from '../../src/logger.ts'
 import { MemoryMailer } from '../../src/mailer.ts'
 import { migrate } from '../../src/migrate.ts'
 import { PROXY_HEADER, createAuthServer } from '../../src/server.ts'
-import type { TestDatabase } from './db.ts'
+import { withRoleLock, type TestDatabase } from './db.ts'
 
 export const TEST_SECRET = 'test-only-better-auth-secret-0123456789abcdef'
 export const TEST_PROXY_SECRET = 'test-only-proxy-shared-secret-0123456789abcdef'
@@ -36,7 +36,8 @@ const silentLogger = createLogger('silent')
 
 /** Migrates the auth schema of a test database as auth_migrator. */
 export async function migrateTestDatabase(db: TestDatabase): Promise<void> {
-  await migrate(db.url('auth_migrator'), silentLogger)
+  // The migrate step GRANTs to shared roles: serialise with other suites' role setup.
+  await withRoleLock(() => migrate(db.url('auth_migrator'), silentLogger))
 }
 
 export interface CallOptions {

@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"relaylab/internal/identity/authtest"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db"
 	"relaylab/internal/platform/db/dbtest"
@@ -83,6 +85,7 @@ func TestRolesScriptIsIdempotent(t *testing.T) {
 
 func TestMigrateUpDownUp(t *testing.T) {
 	d := dbtest.New(t)
+	authtest.Prepare(t, d) // app tables reference auth."user"
 	ctx := context.Background()
 	migrator := config.NewSecret(d.MigratorURL)
 
@@ -137,5 +140,55 @@ func TestRuntimeRoleCannotMigrate(t *testing.T) {
 	err := db.Migrate(context.Background(), config.NewSecret(d.RuntimeURL), quiet)
 	if err == nil {
 		t.Fatal("runtime role must not be able to apply migrations")
+	}
+}
+
+func TestMigrateFailsFastWithoutAuthSchema(t *testing.T) {
+	d := dbtest.New(t)
+	err := db.Migrate(context.Background(), config.NewSecret(d.MigratorURL), quiet)
+	if err == nil {
+		t.Fatal("app migrations must refuse to run before the auth migrations")
+	}
+	if !strings.Contains(err.Error(), "run the auth migrations") {
+		t.Fatalf("error does not explain the fix: %v", err)
+	}
+}
+
+func TestDeletingAuthUserDeletesTheirProjects(t *testing.T) {
+	d := dbtest.New(t)
+	authtest.Prepare(t, d)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, config.NewSecret(d.MigratorURL), quiet); err != nil {
+		t.Fatal(err)
+	}
+	authConn, err := pgx.Connect(ctx, d.AuthRuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = authConn.Close(ctx) }()
+	appConn, err := pgx.Connect(ctx, d.RuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = appConn.Close(ctx) }()
+
+	for _, u := range []string{"keep", "gone"} {
+		if _, err := authConn.Exec(ctx, `INSERT INTO auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+			VALUES ($1, $1, $1 || '@example.test', true, now(), now())`, u); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := appConn.Exec(ctx, `INSERT INTO app.projects (id, owner_id, name) VALUES (gen_random_uuid(), $1, 'p')`, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The auth service deletes users as auth_runtime; the FK cascade removes their projects.
+	if _, err := authConn.Exec(ctx, `DELETE FROM auth."user" WHERE id = 'gone'`); err != nil {
+		t.Fatal(err)
+	}
+	var gone, kept int
+	_ = appConn.QueryRow(ctx, `SELECT count(*) FROM app.projects WHERE owner_id = 'gone'`).Scan(&gone)
+	_ = appConn.QueryRow(ctx, `SELECT count(*) FROM app.projects WHERE owner_id = 'keep'`).Scan(&kept)
+	if gone != 0 || kept != 1 {
+		t.Fatalf("after deleting user: gone=%d kept=%d", gone, kept)
 	}
 }

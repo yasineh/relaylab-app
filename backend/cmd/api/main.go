@@ -22,6 +22,7 @@ import (
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
 	"relaylab/internal/platform/logging"
+	"relaylab/internal/projects"
 )
 
 func main() {
@@ -100,7 +101,8 @@ func runServer() int {
 			Timeout:     time.Duration(cfg.Limits.AuthProxyTimeoutSeconds) * time.Second,
 			ForwardedTo: cfg.AppOrigin.Scheme,
 		}),
-		web: webHandler(),
+		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
+		web:      webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)
 

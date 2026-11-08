@@ -9,11 +9,25 @@ import (
 )
 
 type Querier interface {
+	CountProjects(ctx context.Context, ownerID string) (int32, error)
+	// Every query is scoped by owner_id: there is deliberately no query that loads
+	// a project by id alone (ownership is enforced in the data layer too).
+	CreateProject(ctx context.Context, arg CreateProjectParams) (AppProject, error)
+	// One statement; everything scoped to the project goes by FK cascade.
+	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
+	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)
 	// The only query Go runs against Better Auth's tables: read-only session lookup
 	// by the token from a signature-verified cookie (design decision 2, option A).
 	GetSessionByToken(ctx context.Context, token string) (GetSessionByTokenRow, error)
+	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
+	// Serialises creates per owner for the limit check (the user row lives in the
+	// auth schema, where the api cannot take row locks).
+	LockOwnerProjects(ctx context.Context, ownerID string) error
 	// Readiness probe: a trivial round trip using the runtime role.
 	Ping(ctx context.Context) (int32, error)
+	// NULL arguments keep the current value; set_description distinguishes
+	// "leave unchanged" from "clear the description".
+	UpdateProject(ctx context.Context, arg UpdateProjectParams) (AppProject, error)
 }
 
 var _ Querier = (*Queries)(nil)

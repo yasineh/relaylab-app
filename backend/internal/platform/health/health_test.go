@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"relaylab/internal/identity/authtest"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db"
 	"relaylab/internal/platform/db/dbtest"
@@ -93,6 +94,7 @@ func TestReadinessFlipsOnShutdown(t *testing.T) {
 // Integration: real Postgres checks for pending and applied migrations.
 func TestPostgresChecks(t *testing.T) {
 	d := dbtest.New(t)
+	authtest.Prepare(t, d) // app migrations reference auth."user"
 	ctx := context.Background()
 	pool, err := db.Open(ctx, config.NewSecret(d.RuntimeURL))
 	if err != nil {

@@ -9,9 +9,15 @@ package authtest
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +25,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"relaylab/internal/platform/db/dbtest"
 )
@@ -52,6 +60,29 @@ func Require(t testing.TB) string {
 	return dir
 }
 
+// Prepare gives d an auth schema so app migrations (which reference
+// auth."user") can run: the real auth migrations when Node.js and the auth
+// package are available, otherwise dbtest.StubAuthSchema. With
+// RELAYLAB_REQUIRE_AUTH=1 only the real migrations are accepted.
+func Prepare(t testing.TB, d *dbtest.DB) {
+	t.Helper()
+	if available() || os.Getenv("RELAYLAB_REQUIRE_AUTH") == "1" {
+		Migrate(t, d)
+		return
+	}
+	if err := dbtest.StubAuthSchema(context.Background(), d); err != nil {
+		t.Fatalf("stub auth schema: %v", err)
+	}
+}
+
+func available() bool {
+	if _, err := exec.LookPath("node"); err != nil {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(dbtest.RepoRoot(), "auth", "node_modules", "better-auth"))
+	return err == nil
+}
+
 // Migrate runs the real `auth migrate` command against d as auth_migrator: the
 // Better Auth tables plus the grants to app_runtime and app_migrator.
 func Migrate(t testing.TB, d *dbtest.DB) {
@@ -59,11 +90,18 @@ func Migrate(t testing.TB, d *dbtest.DB) {
 	dir := Require(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "node", "src/cli/migrate.ts")
-	cmd.Dir = dir
-	cmd.Env = append(baseEnv(), "AUTH_MIGRATION_DATABASE_URL="+d.AuthMigratorURL, "LOG_LEVEL=warn")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("auth migrate: %v\n%s", err, out)
+	// The migrate command GRANTs to shared roles: serialise with other packages' role setup.
+	err := dbtest.WithRoleLock(ctx, func() error {
+		cmd := exec.CommandContext(ctx, "node", "src/cli/migrate.ts")
+		cmd.Dir = dir
+		cmd.Env = append(baseEnv(), "AUTH_MIGRATION_DATABASE_URL="+d.AuthMigratorURL, "LOG_LEVEL=warn")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("%w\n%s", err, out)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("auth migrate: %v", err)
 	}
 }
 
@@ -166,4 +204,45 @@ func freePort(t testing.TB) int {
 		t.Fatal(fmt.Errorf("unexpected address type %T", l.Addr()))
 	}
 	return addr.Port
+}
+
+// SessionCookie inserts a session for userID (who must exist in auth."user")
+// expiring in a day, and returns a Cookie header value signed with
+// SessionSecret, in Better Auth's format: relaylab.session_token=<token>.<sig>.
+func SessionCookie(t testing.TB, d *dbtest.DB, userID string) string {
+	t.Helper()
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		t.Fatal(err)
+	}
+	token := hex.EncodeToString(b)[:32]
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, d.AuthRuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, `INSERT INTO auth."session" (id, "expiresAt", token, "createdAt", "updatedAt", "userId")
+		VALUES ($1, now() + interval '1 day', $2, now(), now(), $3)`, "s-"+token, token, userID); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	mac := hmac.New(sha256.New, []byte(SessionSecret))
+	mac.Write([]byte(token))
+	value := token + "." + base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	return "relaylab.session_token=" + url.QueryEscape(value)
+}
+
+// SeedUser inserts a verified user with the given id (email <id>@example.test).
+func SeedUser(t testing.TB, d *dbtest.DB, userID string) {
+	t.Helper()
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, d.AuthRuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, `INSERT INTO auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+		VALUES ($1, $1, $1 || '@example.test', true, now(), now())`, userID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
 }

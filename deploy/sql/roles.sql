@@ -10,7 +10,7 @@
 --   psql -v ON_ERROR_STOP=1 -d relaylab -f deploy/sql/roles.sql
 --
 -- Roles:
---   app_migrator   DDL on schema app (goose migrations)
+--   app_migrator   DDL on schema app (goose migrations); USAGE on auth (for FKs)
 --   app_runtime    DML on schema app; USAGE on auth (SELECT grants on specific
 --                  auth tables are added by the Better Auth migration step)
 --   auth_migrator  DDL on schema auth (Better Auth migrations)
@@ -57,7 +57,9 @@ ALTER SCHEMA auth OWNER TO auth_migrator;
 
 -- Runtime access.
 GRANT USAGE ON SCHEMA app TO app_runtime;
-GRANT USAGE ON SCHEMA auth TO auth_runtime, app_runtime;
+-- app_migrator needs USAGE to create foreign keys to auth."user" (REFERENCES is
+-- granted on that table by the auth migrate command).
+GRANT USAGE ON SCHEMA auth TO auth_runtime, app_runtime, app_migrator;
 
 ALTER DEFAULT PRIVILEGES FOR ROLE app_migrator IN SCHEMA app
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_runtime;

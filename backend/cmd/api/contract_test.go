@@ -21,6 +21,7 @@ import (
 	"relaylab/internal/platform/db/dbtest"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
+	"relaylab/internal/projects"
 )
 
 // Contract tests: the real auth service (Better Auth, pinned version) behind the
@@ -78,6 +79,7 @@ func newContractEnv(t *testing.T, authEnv ...string) *contractEnv {
 			Target: authCfg.ServiceURL, Secret: authCfg.ProxySharedSecret,
 			Timeout: 10 * time.Second, ForwardedTo: cfg.AppOrigin.Scheme,
 		}),
+		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
 	}))
 	t.Cleanup(api.Close)
 

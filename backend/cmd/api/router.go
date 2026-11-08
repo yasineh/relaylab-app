@@ -11,6 +11,7 @@ import (
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
+	"relaylab/internal/projects"
 )
 
 type routerDeps struct {
@@ -20,6 +21,7 @@ type routerDeps struct {
 	health    *health.Checker
 	validator *identity.Validator
 	authProxy http.Handler // /api/auth/* to the Better Auth service
+	projects  *projects.Handler
 	web       http.Handler // embedded SPA; nil when not built
 }
 
@@ -65,6 +67,7 @@ func newRouter(d routerDeps) http.Handler {
 			v1.MethodNotAllowed(httpx.MethodNotAllowed)
 			v1.Get("/config", publicConfig(d.auth))
 			v1.Get("/me", identity.Me)
+			v1.Route("/projects", d.projects.Routes)
 		})
 	})
 

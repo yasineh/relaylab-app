@@ -22,6 +22,7 @@ import (
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
+	"relaylab/internal/projects"
 	"relaylab/internal/webui"
 )
 
@@ -100,7 +101,8 @@ func testRouterWith(t *testing.T, o routerOpts) http.Handler {
 		authProxy: identity.NewAuthProxy(identity.ProxyOptions{
 			Target: target, Secret: authCfg.ProxySharedSecret, Timeout: 5 * time.Second, ForwardedTo: "http",
 		}),
-		web: o.web,
+		projects: projects.NewHandler(projects.NewService(nil, 20)), // not called by these tests
+		web:      o.web,
 	})
 }
 

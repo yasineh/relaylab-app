@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createLogger } from '../src/logger.ts'
 import { migrate } from '../src/migrate.ts'
-import { createTestDatabase, type TestDatabase } from './helpers/db.ts'
+import { createTestDatabase, withRoleLock, type TestDatabase } from './helpers/db.ts'
 
 let db: TestDatabase
 const logger = createLogger('silent')
@@ -27,10 +27,10 @@ async function query<T = Record<string, unknown>>(url: string, sql: string, para
 
 describe('auth migrate command', () => {
   it('creates the Better Auth tables on a fresh database, then is a no-op the second time', async () => {
-    const first = await migrate(db.url('auth_migrator'), logger)
+    const first = await withRoleLock(() => migrate(db.url('auth_migrator'), logger))
     expect(first.created.sort()).toEqual(['account', 'rateLimit', 'session', 'user', 'verification'])
 
-    const second = await migrate(db.url('auth_migrator'), logger)
+    const second = await withRoleLock(() => migrate(db.url('auth_migrator'), logger))
     expect(second).toEqual({ created: [], altered: [] })
   })
 

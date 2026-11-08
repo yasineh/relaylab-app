@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -62,7 +63,12 @@ func New(t testing.TB) *DB {
 	defer func() { _ = admin.Close(ctx) }()
 
 	name := "relaylab_test_" + randHex(6)
-	if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
+	// CREATE/DROP DATABASE also touch shared catalogs (pg_database, pg_shdepend),
+	// so they run under the role lock like roles.sql and grants.
+	if err := WithRoleLock(ctx, func() error {
+		_, err := admin.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
+		return err
+	}); err != nil {
 		t.Fatalf("create database: %v", err)
 	}
 	t.Cleanup(func() {
@@ -74,7 +80,10 @@ func New(t testing.TB) *DB {
 			return
 		}
 		defer func() { _ = c.Close(ctx) }()
-		if _, err := c.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)"); err != nil {
+		if err := WithRoleLock(ctx, func() error {
+			_, err := c.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{name}.Sanitize()+" WITH (FORCE)")
+			return err
+		}); err != nil {
 			t.Logf("cleanup drop: %v", err)
 		}
 	})
@@ -90,12 +99,7 @@ func New(t testing.TB) *DB {
 	}
 
 	// Roles are cluster-wide: serialise role DDL across parallel test packages.
-	if _, err := admin.Exec(ctx, "SELECT pg_advisory_lock(727001)"); err != nil {
-		t.Fatalf("advisory lock: %v", err)
-	}
-	defer func() { _, _ = admin.Exec(context.Background(), "SELECT pg_advisory_unlock(727001)") }()
-
-	if err := ApplyRoles(ctx, d.AdminURL); err != nil {
+	if err := WithRoleLock(ctx, func() error { return retryConcurrentUpdate(func() error { return ApplyRoles(ctx, d.AdminURL) }) }); err != nil {
 		t.Fatalf("apply roles.sql: %v", err)
 	}
 	return d
@@ -161,4 +165,67 @@ func randHex(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// StubAuthSchema creates the two Better Auth tables the Go side depends on
+// (auth."user" and auth."session", exactly as declared for sqlc in
+// db/sqlc/10_auth_tables.sql) plus the grants the real auth migrate command
+// applies. It stands in for the auth migrations where Node.js is unavailable;
+// prefer authtest.Prepare, which uses the real migrations when it can.
+func StubAuthSchema(ctx context.Context, d *DB) error {
+	return WithRoleLock(ctx, func() error { return stubAuthSchema(ctx, d) })
+}
+
+// WithRoleLock runs fn while holding the cluster-wide advisory lock that
+// serialises role and grant changes across concurrently running test packages
+// (and the auth service's tests, which use the same key). GRANTs touch shared
+// catalogs, so concurrent role DDL fails with "tuple concurrently updated".
+func WithRoleLock(ctx context.Context, fn func() error) error {
+	base := os.Getenv("RELAYLAB_TEST_DATABASE_URL")
+	c, err := pgx.Connect(ctx, base)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, "SELECT pg_advisory_lock(727001)"); err != nil {
+		return err
+	}
+	defer func() { _, _ = c.Exec(context.Background(), "SELECT pg_advisory_unlock(727001)") }()
+	return fn()
+}
+
+// retryConcurrentUpdate retries fn when PostgreSQL reports "tuple concurrently
+// updated" (XX000), which shared-catalog DDL can still hit when another
+// cluster client (outside these helpers) changes the same role at once.
+func retryConcurrentUpdate(fn func() error) error {
+	var err error
+	for attempt := range 5 {
+		if err = fn(); err == nil || !strings.Contains(err.Error(), "tuple concurrently updated") {
+			return err
+		}
+		time.Sleep(time.Duration(attempt+1) * 50 * time.Millisecond)
+	}
+	return err
+}
+
+func stubAuthSchema(ctx context.Context, d *DB) error {
+	ddl, err := os.ReadFile(filepath.Join(RepoRoot(), "backend", "db", "sqlc", "10_auth_tables.sql"))
+	if err != nil {
+		return err
+	}
+	c, err := pgx.Connect(ctx, d.AuthMigratorURL)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = c.Close(ctx) }()
+	for _, stmt := range []string{
+		string(ddl),
+		`GRANT SELECT ON auth."session", auth."user" TO app_runtime`,
+		`GRANT REFERENCES ON auth."user" TO app_migrator`,
+	} {
+		if _, err := c.Exec(ctx, stmt); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -8,6 +8,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// User-owned projects; deleting one cascades to all project-scoped data
+type AppProject struct {
+	ID          pgtype.UUID
+	OwnerID     string
+	Name        string
+	Description pgtype.Text
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type AuthSession struct {
 	ID        string
 	ExpiresAt pgtype.Timestamptz

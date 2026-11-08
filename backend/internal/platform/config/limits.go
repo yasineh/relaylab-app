@@ -17,6 +17,8 @@ type Limits struct {
 	APIMaxBodyBytes int
 	// AuthProxyTimeoutSeconds bounds a proxied /api/auth request end to end (502/504 when exceeded).
 	AuthProxyTimeoutSeconds int
+	// ProjectsPerUser caps how many projects one user may own (409 project_limit_reached).
+	ProjectsPerUser int
 }
 
 type limitSpec struct {
@@ -45,6 +47,12 @@ var limitSpecs = []limitSpec{
 		def:  10,
 		doc:  "Maximum time for a request proxied to the auth service, in seconds",
 		bind: func(l *Limits) *int { return &l.AuthProxyTimeoutSeconds },
+	},
+	{
+		env:  "LIMIT_PROJECTS_PER_USER",
+		def:  20,
+		doc:  "Maximum number of projects one user may own",
+		bind: func(l *Limits) *int { return &l.ProjectsPerUser },
 	},
 }
 

@@ -1,7 +1,7 @@
 # API reference
 
-The HTTP API that exists **today**. Later changes add projects, endpoints,
-events, and replay; each one documents its routes here when it ships.
+The HTTP API that exists **today**. Later changes add endpoints, events, and
+replay; each one documents its routes here when it ships.
 
 Everything is served from the application origin (`APP_ORIGIN`): the web app,
 the dashboard API under `/api/v1`, and authentication under `/api/auth`. The
@@ -14,7 +14,7 @@ from clients that are not browsers.
 - **Authentication**: the session cookie set by `/api/auth`. See [Authentication and sessions](security/authentication.md).
 - **CSRF**: `POST`, `PUT`, `PATCH`, and `DELETE` on `/api/v1` require `Origin: <APP_ORIGIN>`. When the browser sends no `Origin`, `Sec-Fetch-Site: same-origin` is required instead.
 - **Request IDs**: every response has `X-Request-ID`. A safe inbound value (1–64 characters of `[A-Za-z0-9._-]`) is reused.
-- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s).
+- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20).
 
 ### Error envelope
 
@@ -31,10 +31,13 @@ SQL, file paths, or configuration values.
 | 401 | `session_expired` | The session's expiry time has passed |
 | 403 | `email_not_verified` | Email verification is required and the user has not verified |
 | 403 | `origin_rejected` | Unsafe method without a matching `Origin` or `Sec-Fetch-Site: same-origin` |
-| 404 | `not_found` | Unknown path (on `/api/v1`, only after authentication succeeds) |
+| 400 | `invalid_json` | The body is not one JSON object, has unknown fields, or has trailing data |
+| 404 | `not_found` | Unknown path (on `/api/v1`, only after authentication succeeds), or a resource that is missing, owned by someone else, or has a malformed id. These cases are indistinguishable |
 | 405 | `method_not_allowed` | Known path, wrong method |
 | 413 | `body_too_large` | Body over the limit |
+| 409 | `project_limit_reached` | Creating a project beyond `LIMIT_PROJECTS_PER_USER` |
 | 415 | `unsupported_media_type` | Body is not `application/json` |
+| 422 | `validation_failed` | A field is invalid; `error.fields` maps each field to a message |
 | 431 | `headers_too_large` | Headers over the limit |
 | 500 | `internal_error` | Unexpected failure (details only in server logs) |
 | 502 | `auth_unavailable` | The auth service could not be reached (`/api/auth` only) |
@@ -69,6 +72,53 @@ The signed-in user, taken only from the validated session. Responses are
 ```
 
 Errors: `401 unauthenticated`, `401 session_expired`, `403 email_not_verified`.
+
+### Projects
+
+A project belongs to exactly one user: the signed-in user. Every project route
+acts only on the caller's own projects; a project owned by someone else returns
+the same `404 not_found` as one that does not exist. The owner is always taken
+from the session, never from the request.
+
+A project looks like this (timestamps are UTC, RFC 3339):
+
+```json
+{
+  "id": "01936f3e-7b8a-7c1d-9e2f-0a1b2c3d4e5f",
+  "name": "Stripe sandbox",
+  "description": "Payment provider test hooks",
+  "created_at": "2026-11-08T10:00:00Z",
+  "updated_at": "2026-11-08T10:00:00Z"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `id` | UUIDv7, assigned by the server |
+| `name` | Required. 1–80 characters after trimming whitespace; no control characters. Stored and returned as given (HTML is not interpreted). Not unique |
+| `description` | Optional, may be `null`. Up to 500 characters after trimming; line breaks allowed. An empty string is stored as `null` |
+
+| Method and path | Body | Success | Errors |
+|---|---|---|---|
+| `GET /api/v1/projects` | — | `200 {"items":[project, ...]}`, newest first. Bounded by the project limit, so not paginated | |
+| `POST /api/v1/projects` | `{"name": "...", "description": "..."}` | `201` project, with `Location: /api/v1/projects/<id>` | `422`, `409 project_limit_reached`, `400` |
+| `GET /api/v1/projects/{projectId}` | — | `200` project | `404` |
+| `PATCH /api/v1/projects/{projectId}` | `{"name": "..."}` and/or `{"description": "..." \| null}`; `null` clears the description | `200` project; `updated_at` changes | `404`, `422` (also for an empty body), `400` |
+| `DELETE /api/v1/projects/{projectId}` | — | `204`, no body | `404` |
+
+Example validation error:
+
+```json
+{ "error": { "code": "validation_failed", "message": "Some fields are invalid.", "request_id": "…", "fields": { "name": "Enter a project name." } } }
+```
+
+**Limit.** A user may own at most `LIMIT_PROJECTS_PER_USER` projects (default
+20). The check is serialised per user, so concurrent creates cannot exceed it.
+
+**Deletion is permanent.** `DELETE` removes the project and everything scoped
+to it (endpoints, events, replays, jobs as they are added) in one statement,
+through database cascades. Deleting the account deletes all of the user's
+projects the same way. There is no archive or restore.
 
 ## Authentication (`/api/auth/*`)
 

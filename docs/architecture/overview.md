@@ -10,7 +10,7 @@ flowchart LR
   subgraph dev["Local development (Docker Compose)"]
     vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
     subgraph image["relaylab image (distroless, nonroot)"]
-      api["api<br/>/healthz, /readyz<br/>/api/v1/* (session required)<br/>/api/auth/* proxy<br/>embedded web build"]
+      api["api<br/>/healthz, /readyz<br/>/api/v1/me, /api/v1/projects (session required)<br/>/api/auth/* proxy<br/>embedded web build"]
       worker["worker<br/>/healthz, /readyz on :8081<br/>(no jobs yet)"]
       migrate["api migrate<br/>(one-shot, goose)"]
     end
@@ -18,7 +18,7 @@ flowchart LR
       auth["auth: Better Auth 1.7.18<br/>:3001, internal network only"]
       authmigrate["auth migrate<br/>(one-shot, runs first)"]
     end
-    pg[("PostgreSQL 17<br/>schema app: goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
+    pg[("PostgreSQL 17<br/>schema app: projects, goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
     mailpit["Mailpit<br/>SMTP :1025, inbox :8025"]
   end
 

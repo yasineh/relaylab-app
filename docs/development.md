@@ -159,6 +159,7 @@ value is hard-coded anywhere else.
 | `LIMIT_HTTP_MAX_HEADER_BYTES` | 32768 | Larger request headers get `431 headers_too_large` |
 | `LIMIT_API_MAX_BODY_BYTES` | 65536 | Larger `/api` bodies get `413 body_too_large` |
 | `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` | 10 | Proxied `/api/auth` requests that take longer get `504 auth_timeout` |
+| `LIMIT_PROJECTS_PER_USER` | 20 | Creating more projects gets `409 project_limit_reached` |
 
 ## Database: schemas, roles, migrations
 
@@ -184,7 +185,20 @@ goose SQL files in `backend/migrations/`, embedded into the API binary. goose ke
 returns 503 until the database is reachable and every embedded migration is
 applied.
 
+App tables reference `auth."user"`, so `pnpm migrate` always runs the auth
+migrations first, and the app migrations refuse to start if the auth tables are
+missing.
+
 To reset the dev database, run `docker compose down -v` (deletes the volume), then `pnpm dev`.
+
+`deploy/sql/roles.sql` runs only when the dev database volume is first created.
+If your local database predates a change to it (for example `add-project-management`
+gave `app_migrator` `USAGE` on schema `auth`), either reset as above or apply the
+grant once:
+
+```sh
+docker compose exec postgres psql -U postgres -d relaylab -c 'GRANT USAGE ON SCHEMA auth TO app_migrator;'
+```
 
 ### SQL code generation
 
@@ -206,7 +220,7 @@ by the scripts, database tests fail instead of skipping.
 |---|---|
 | `web` | Components, forms, route guard, session-expiry handling. `fetch` is mocked; unmocked requests fail the test |
 | `auth` | Better Auth configuration against a real database: sign-up, verification, sign-in, reset, rate limits, migrations and grants, the operator CLI, and credential-free logs |
-| `backend` | Handlers, middleware, session validation, the auth proxy, and database integration |
+| `backend` | Handlers, middleware, session validation, the auth proxy, projects, and database integration. Tests that need the `auth` schema use the real auth migrations when Node.js is available and a stub of the two tables Go reads otherwise |
 | Auth contract (`pnpm test:contract`) | The real auth service behind the real Go proxy and validator: valid, signed-out, revoked, expired, tampered, and unverified sessions; rate limiting and enumeration through the proxy |
 
 The contract tests need Node.js and `pnpm install`. They skip without them,
@@ -238,6 +252,8 @@ backend/                            Go module `relaylab`
   migrations/                       goose SQL migrations (app schema)
   db/queries/                       sqlc queries
   internal/identity                 session validation, /api/auth proxy, /api/v1/me
+  internal/projects                 project service and /api/v1/projects handlers
+  internal/testutil                 deletion (no-orphans contract) and isolation (cross-user 404) helpers
   scripts/                          env loader and test runners used by package scripts
 auth/                               Better Auth service (Node 24, TypeScript)
   src/                              server, Better Auth config, mailer, migrate, CLIs

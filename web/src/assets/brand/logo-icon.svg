@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160">
+  <g fill="none" stroke="#2563EB" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Top-left spine & loop extending to right -->
+    <path d="M 45,95 L 45,35 C 45,22 58,15 78,15 L 85,15 C 105,15 120,28 120,48 C 120,68 105,80 85,80 L 45,80" />
+    <!-- Diagonal right leg terminating downwards -->
+    <path d="M 82,80 L 115,115" />
+    <!-- Curved left leg/hook going down -->
+    <path d="M 45,80 C 45,95 45,100 45,115" />
+  </g>
+
+  <!-- Left Arrowhead (Pointing Downwards) -->
+  <polygon points="30,110 45,138 60,110" fill="#2563EB" />
+
+  <!-- Right Arrowhead (Pointing Down-Right) -->
+  <polygon points="102,125 130,130 125,102" fill="#2563EB" />
+</svg>

@@ -28,6 +28,7 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 - [Continuous integration](docs/ci.md)
 - [Architecture overview](docs/architecture/overview.md) (current implementation)
 - [Database schema](docs/architecture/erd.md)
+- [Brand and design system](docs/design/design-system.md)
 - [MVP plan and decisions](docs/plan/mvp-plan.md)
 - [Specifications](openspec/): planned changes live in `openspec/changes/`
 

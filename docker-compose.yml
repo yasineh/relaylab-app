@@ -11,6 +11,13 @@ x-app-env: &app-env
   LOG_LEVEL: ${LOG_LEVEL:-info}
   DATABASE_URL: postgres://app_runtime:${APP_RUNTIME_PASSWORD}@postgres:5432/${POSTGRES_DB:-relaylab}?sslmode=disable
 
+# Shared by the auth service and the api (session signing and the proxy header).
+x-auth-env: &auth-env
+  BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+  AUTH_PROXY_SHARED_SECRET: ${AUTH_PROXY_SHARED_SECRET:?set AUTH_PROXY_SHARED_SECRET in .env}
+  AUTH_SIGNUP_ENABLED: ${AUTH_SIGNUP_ENABLED:-true}
+  AUTH_REQUIRE_EMAIL_VERIFICATION: ${AUTH_REQUIRE_EMAIL_VERIFICATION:-true}
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -34,6 +41,28 @@ services:
       timeout: 3s
       retries: 30
 
+  # Local SMTP server and inbox (verification and password-reset emails).
+  # Inbox UI: http://localhost:${MAILPIT_UI_HOST_PORT:-8025}
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
+      - "127.0.0.1:${MAILPIT_UI_HOST_PORT:-8025}:8025"
+
+  # One-shot: applies the Better Auth schema (auth_migrator role) and the grants
+  # the api needs. Runs before the goose migrations: app tables reference auth."user".
+  auth-migrate:
+    build:
+      context: .
+      dockerfile: auth/Dockerfile
+    image: relaylab-auth:dev
+    command: ["node", "src/cli/migrate.ts"]
+    environment:
+      AUTH_MIGRATION_DATABASE_URL: postgres://auth_migrator:${AUTH_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-relaylab}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   # One-shot: applies goose migrations with the migrator role, then exits.
   migrate:
     build: .
@@ -43,20 +72,43 @@ services:
       APP_ENV: ${APP_ENV:-development}
       MIGRATION_DATABASE_URL: postgres://app_migrator:${APP_MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB:-relaylab}?sslmode=disable
     depends_on:
-      postgres:
-        condition: service_healthy
+      auth-migrate:
+        condition: service_completed_successfully
+
+  # Better Auth service. Internal network only: never published to the host.
+  # The api proxies /api/auth/* to it with the shared proxy header.
+  auth:
+    image: relaylab-auth:dev
+    environment:
+      <<: *auth-env
+      APP_ENV: ${APP_ENV:-development}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:5173}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      AUTH_PORT: "3001"
+      AUTH_DATABASE_URL: postgres://auth_runtime:${AUTH_RUNTIME_PASSWORD}@postgres:5432/${POSTGRES_DB:-relaylab}?sslmode=disable
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: ${MAIL_FROM:-RelayLab <no-reply@relaylab.localhost>}
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
 
   api:
     image: relaylab:dev
     command: ["/usr/local/bin/api"]
     environment:
-      <<: *app-env
+      <<: [*app-env, *auth-env]
       HTTP_ADDR: ":8080"
+      AUTH_SERVICE_URL: http://auth:3001
     ports:
       - "127.0.0.1:${API_HOST_PORT:-8080}:8080"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      auth:
+        condition: service_healthy
 
   worker:
     image: relaylab:dev
@@ -89,19 +141,14 @@ services:
       - ./pnpm-lock.yaml:/repo/pnpm-lock.yaml:ro
       - ./pnpm-workspace.yaml:/repo/pnpm-workspace.yaml:ro
       - ./backend/package.json:/repo/backend/package.json:ro
+      - ./auth/package.json:/repo/auth/package.json:ro
       - ./web:/repo/web
       - web_root_node_modules:/repo/node_modules
       - web_node_modules:/repo/web/node_modules
     depends_on:
       - api
 
-  # Reserved for the Better Auth service (add-user-auth). It will run on the
-  # internal network only and is never published to the host in
-  # production-like profiles; the api proxies /api/auth/* to it.
-  # auth:
-  #   build: ./auth
-
-  # Isolated cluster for Go integration tests (`make test-go`). Roles are
+  # Isolated cluster for Go and auth integration tests (`pnpm test`). Roles are
   # cluster-wide, so tests must never share a cluster with the dev database.
   postgres-test:
     image: postgres:17-alpine

@@ -10,6 +10,7 @@ WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json web/
 COPY backend/package.json backend/
+COPY auth/package.json auth/
 RUN pnpm install --frozen-lockfile --filter @relaylab/web
 COPY web/ web/
 RUN pnpm --filter @relaylab/web build

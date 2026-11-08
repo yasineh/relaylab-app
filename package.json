@@ -13,7 +13,7 @@
     "dev:backend": "pnpm db:up && pnpm migrate && pnpm --filter @relaylab/backend --parallel run \"/^dev:(api|worker)$/\"",
     "dev:auth": "pnpm --filter @relaylab/auth dev",
     "dev:docker": "docker compose up --build",
-    "db:up": "docker compose up -d --wait postgres",
+    "db:up": "docker compose up -d --wait postgres mailpit",
     "db:down": "docker compose down",
     "migrate": "pnpm --filter @relaylab/auth migrate && pnpm --filter @relaylab/backend migrate",
     "create-user": "pnpm --filter @relaylab/auth create-user",

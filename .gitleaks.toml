@@ -13,3 +13,10 @@ paths = [
   # pass the password rules) against throwaway databases. They are not credentials.
   '''(^|/)auth/test/''',
 ]
+# Synthetic fixtures in Go tests: made-up passphrases that satisfy the password
+# rules, and a fake session token in Better Auth's format. None is a credential.
+regexes = [
+  '''^violet-anchor-89-orbit$''',
+  '''^harbor-lantern-42-quartz$''',
+  '''^OSsmUnAfkn3ueRXSDK8HJVOqRyNbSGO7$''',
+]

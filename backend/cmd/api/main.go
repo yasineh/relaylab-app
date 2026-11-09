@@ -10,20 +10,28 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"relaylab/internal/endpoints"
 	"relaylab/internal/endpoints/token"
 	"relaylab/internal/identity"
+	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
 	"relaylab/internal/platform/logging"
+	"relaylab/internal/platform/redact"
 	"relaylab/internal/projects"
 )
 
@@ -77,6 +85,12 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	ingestCfg, err := config.LoadIngest(os.Getenv)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
 	tokenKeys, err := token.NewKeys(endpointCfg.HMACKey(), endpointCfg.EncKey(), 1)
 	if err != nil {
 		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
@@ -103,6 +117,23 @@ func runServer() int {
 	}
 	checker := health.New(dbCheck, migCheck)
 
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	ingestHandler := ingestion.NewHandler(ingestion.Options{
+		Store:             ingestion.NewPGStore(pool),
+		Hasher:            tokenKeys,
+		Redactor:          redact.New(ingestCfg.RedactExtraHeaders, ingestCfg.RedactExtraParams),
+		Metrics:           ingestion.NewMetrics(registry),
+		MaxBodyBytes:      cfg.Limits.IngestMaxBodyBytes,
+		MaxHeaderFields:   cfg.Limits.IngestMaxHeaderFields,
+		BodyTimeout:       time.Duration(cfg.Limits.IngestBodyTimeoutSeconds) * time.Second,
+		EndpointPerMinute: cfg.Limits.IngestRatePerEndpointPerMinute,
+		EndpointBurst:     cfg.Limits.IngestRateEndpointBurst,
+		IPPerMinute:       cfg.Limits.IngestRatePerIPPerMinute,
+		IPBurst:           cfg.Limits.IngestRateIPBurst,
+		IngestHost:        separateIngestHost(endpointCfg.IngestBaseURL.Hostname(), cfg.AppOrigin.Hostname()),
+	})
+
 	handler := newRouter(routerDeps{
 		cfg:       cfg,
 		auth:      authCfg,
@@ -118,7 +149,8 @@ func runServer() int {
 		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
 		endpoints: endpoints.NewHandler(endpoints.NewService(pool, tokenKeys,
 			endpointCfg.IngestBaseURL.String(), cfg.Limits.EndpointsPerProject)),
-		web: webHandler(),
+		ingestion: ingestHandler,
+		web:       webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)
 
@@ -128,10 +160,42 @@ func runServer() int {
 		return 1
 	}
 	logger.Info("api listening", slog.String("addr", ln.Addr().String()))
+
+	if ingestCfg.MetricsAddr != "" {
+		mln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", ingestCfg.MetricsAddr)
+		if err != nil {
+			logger.Error("metrics listen failed", slog.String("addr", ingestCfg.MetricsAddr), slog.String("error", err.Error()))
+			return 1
+		}
+		msrv := httpx.NewServer(ingestCfg.MetricsAddr, metricsMux(registry), cfg.Limits.HTTPMaxHeaderBytes, logger)
+		go func() {
+			if err := httpx.Serve(ctx, msrv, mln, cfg.ShutdownGrace, nil); err != nil {
+				logger.Error("metrics server stopped with error", slog.String("error", err.Error()))
+			}
+		}()
+		logger.Info("metrics listening", slog.String("addr", mln.Addr().String()))
+	}
 	if err := httpx.Serve(ctx, srv, ln, cfg.ShutdownGrace, checker.MarkShuttingDown); err != nil {
 		logger.Error("server stopped with error", slog.String("error", err.Error()))
 		return 1
 	}
 	logger.Info("api stopped")
 	return 0
+}
+
+// separateIngestHost returns the ingest host when it differs from the app
+// host (a dedicated ingest domain); otherwise "" so ingestion answers on the
+// shared app host.
+func separateIngestHost(ingestHost, appHost string) string {
+	if strings.EqualFold(ingestHost, appHost) {
+		return ""
+	}
+	return ingestHost
+}
+
+// metricsMux serves /metrics for the private metrics listener only.
+func metricsMux(reg *prometheus.Registry) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	return mux
 }

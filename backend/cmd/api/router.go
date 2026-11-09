@@ -9,6 +9,7 @@ import (
 
 	"relaylab/internal/endpoints"
 	"relaylab/internal/identity"
+	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
@@ -24,7 +25,8 @@ type routerDeps struct {
 	authProxy http.Handler // /api/auth/* to the Better Auth service
 	projects  *projects.Handler
 	endpoints *endpoints.Handler
-	web       http.Handler // embedded SPA; nil when not built
+	ingestion *ingestion.Handler // public /h/{token}; never reads the session
+	web       http.Handler       // embedded SPA; nil when not built
 }
 
 // publicV1 lists the only /api/v1 routes reachable without a session.
@@ -38,8 +40,8 @@ var publicV1 = map[string]bool{
 //	/api/auth/*  reverse proxy to the auth service (Better Auth checks Origin itself)
 //	/api/v1/*    dashboard API: same-origin + JSON checks on unsafe methods, and a
 //	             valid session on every route except GET /api/v1/config
-//
-// Later changes mount public ingestion under /h, which never reads the session cookie.
+//	/h/{token}*  public webhook ingestion: no session, CSRF, JSON, or CORS checks;
+//	             it never reads the session cookie (it is stored redacted)
 func newRouter(d routerDeps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(
@@ -53,6 +55,9 @@ func newRouter(d routerDeps) http.Handler {
 	r.MethodNotAllowed(httpx.MethodNotAllowed)
 
 	d.health.Register(r)
+	if d.ingestion != nil {
+		d.ingestion.Routes(r)
+	}
 
 	r.Route("/api", func(api chi.Router) {
 		api.Use(httpx.BodyLimit(d.cfg.Limits.APIMaxBodyBytes))

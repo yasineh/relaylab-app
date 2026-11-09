@@ -20,6 +20,49 @@ func TestLimitDefaults(t *testing.T) {
 	if l.HTTPMaxHeaderBytes != 32*1024 || l.APIMaxBodyBytes != 64*1024 {
 		t.Fatalf("defaults = %+v", l)
 	}
+	if l.IngestMaxBodyBytes != 262144 || l.IngestMaxHeaderFields != 100 || l.IngestBodyTimeoutSeconds != 10 ||
+		l.IngestRatePerEndpointPerMinute != 60 || l.IngestRateEndpointBurst != 30 ||
+		l.IngestRatePerIPPerMinute != 120 || l.IngestRateIPBurst != 60 {
+		t.Fatalf("ingest defaults = %+v", l)
+	}
+}
+
+func TestIngestBodyLimitHardCap(t *testing.T) {
+	if _, err := LoadLimits(envFrom(map[string]string{"LIMIT_INGEST_MAX_BODY_BYTES": "1048576"})); err != nil {
+		t.Fatalf("1 MiB rejected: %v", err)
+	}
+	_, err := LoadLimits(envFrom(map[string]string{"LIMIT_INGEST_MAX_BODY_BYTES": "1048577"}))
+	assertFieldError(t, err, "LIMIT_INGEST_MAX_BODY_BYTES")
+}
+
+// TestLimitGuardStillCatchesLiterals proves the duration and allowlist
+// exemptions do not hide a real duplicated limit.
+func TestLimitGuardStillCatchesLiterals(t *testing.T) {
+	src := `package x
+import "time"
+const NameMaxChars = 100
+const fields = 100
+var d = 30 * time.Second
+var body = 256 << 10`
+	f, err := parser.ParseFile(token.NewFileSet(), "x.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found []int64
+	ast.Inspect(f, func(n ast.Node) bool {
+		if isDuration(n) {
+			return false
+		}
+		if v, ok := constInt(n); ok {
+			found = append(found, v)
+			return false
+		}
+		return true
+	})
+	// The guard sees 100 (twice: the allowlist is per file, not global), and 256<<10, but not the duration.
+	if len(found) != 3 || found[2] != 262144 {
+		t.Fatalf("found %v", found)
+	}
 }
 
 func TestLimitOverride(t *testing.T) {
@@ -54,8 +97,18 @@ func TestLimitSpecsAreUnique(t *testing.T) {
 	}
 }
 
+// unrelatedConstants are named constants whose value happens to equal a limit
+// default but which encode a different rule. Keyed by path relative to the
+// module root.
+var unrelatedConstants = map[string]map[string]bool{
+	// Endpoint display-name length (also a database CHECK), not a header count.
+	filepath.Join("internal", "endpoints", "service.go"): {"NameMaxChars": true},
+}
+
 // TestNoScatteredLimitLiterals fails if a known limit default is hard-coded in
-// Go code outside limits.go, so limits stay in one place (D17).
+// Go code outside limits.go, so limits stay in one place (D17). Duration
+// expressions such as 30*time.Second are not limits and are skipped, as are
+// the named constants in unrelatedConstants.
 func TestNoScatteredLimitLiterals(t *testing.T) {
 	known := map[int64]string{}
 	for _, d := range LimitDocs() {
@@ -76,7 +129,15 @@ func TestNoScatteredLimitLiterals(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			rel, _ := filepath.Rel(root, path)
+			allowed := unrelatedConstants[rel]
 			ast.Inspect(f, func(n ast.Node) bool {
+				if isDuration(n) {
+					return false
+				}
+				if vs, ok := n.(*ast.ValueSpec); ok && len(vs.Names) == 1 && allowed[vs.Names[0].Name] {
+					return false
+				}
 				if v, ok := constInt(n); ok {
 					if env, hit := known[v]; hit {
 						t.Errorf("%s: literal %d duplicates %s; read it from config.Limits", fset.Position(n.Pos()), v, env)
@@ -91,6 +152,22 @@ func TestNoScatteredLimitLiterals(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// isDuration reports a multiplication with a time unit, such as 30*time.Second.
+func isDuration(n ast.Node) bool {
+	b, ok := n.(*ast.BinaryExpr)
+	if !ok || b.Op != token.MUL {
+		return false
+	}
+	for _, side := range []ast.Expr{b.X, b.Y} {
+		if sel, ok := side.(*ast.SelectorExpr); ok {
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == "time" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // constInt evaluates integer literals and simple literal expressions like 32 << 10.

@@ -149,6 +149,9 @@ func TestAcceptsJSONAndAcknowledgesAfterSave(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &ack); err != nil || !ack.OK {
 		t.Fatalf("ack = %s", rec.Body)
 	}
+	if want := `{"ok":true,"event_id":"` + ack.EventID + `"}`; strings.TrimSpace(rec.Body.String()) != want {
+		t.Fatalf("ack body = %s, want %s", rec.Body, want)
+	}
 	if len(f.store.saved) != 1 || f.store.notified != 1 {
 		t.Fatalf("saved %d notified %d", len(f.store.saved), f.store.notified)
 	}

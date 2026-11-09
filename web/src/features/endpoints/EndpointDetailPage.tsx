@@ -131,11 +131,13 @@ function ReceivingUrl({ endpoint: e }: { endpoint: Endpoint }) {
           This endpoint is disabled, so requests to this URL are rejected until you enable it.
         </p>
       ) : null}
-      {/* Remove when add-webhook-ingestion ships the /h/{token} route. */}
       <Alert tone="info">
         <p>
-          Receiving requests is not available in this version of RelayLab yet. The URL is reserved for this
-          endpoint and will start accepting requests once receiving ships.
+          RelayLab stores each request and replies with{' '}
+          <code className="font-mono">{'{"ok":true,"event_id":"…"}'}</code>. Values of credential headers and
+          query parameters, such as Authorization and Cookie, are replaced with{' '}
+          <code className="font-mono">[REDACTED]</code> before storage. Viewing received requests is not
+          available in this version of RelayLab yet.
         </p>
       </Alert>
       <div className="space-y-2">

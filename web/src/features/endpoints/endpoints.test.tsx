@@ -227,8 +227,10 @@ describe('endpoint detail (4.3)', () => {
     const curl = `curl -X POST '${URL1}' -H 'Content-Type: application/json' -d '{"hello":"relaylab"}'`
     expect(await screen.findByText(curl, { selector: 'pre' })).toBeInTheDocument()
 
-    // Honest about the missing ingestion route until add-webhook-ingestion ships.
-    expect(screen.getByText(/Receiving requests is not available in this version/)).toBeInTheDocument()
+    // Explains the acknowledgement and redaction, and is honest that the event explorer has not shipped.
+    expect(screen.getByText(/replaced with/)).toHaveTextContent('Authorization and Cookie')
+    expect(screen.getByText(/Viewing received requests is not available/)).toBeInTheDocument()
+    expect(screen.queryByText(/Receiving requests is not available/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Copy URL' }))
     expect(await navigator.clipboard.readText()).toBe(URL1)

@@ -1,7 +1,7 @@
 # API reference
 
-The HTTP API that exists **today**. Later changes add webhook ingestion,
-events, and replay; each one documents its routes here when it ships.
+The HTTP API that exists **today**. Later changes add viewing events and
+replay; each one documents its routes here when it ships.
 
 Everything is served from the application origin (`APP_ORIGIN`): the web app,
 the dashboard API under `/api/v1`, and authentication under `/api/auth`. The
@@ -128,8 +128,8 @@ nested under a project the caller owns. Another user's project, an endpoint of
 a different project, a missing endpoint, and a malformed id all return the same
 `404 not_found`.
 
-> Receiving webhooks at the endpoint URL (`/h/{token}`) is not available yet.
-> It ships with the webhook ingestion change and will be documented here then.
+Requests sent to the endpoint URL are received as described in
+[Webhook ingestion](#webhook-ingestion-h).
 
 An endpoint looks like this:
 
@@ -183,6 +183,85 @@ exceed it.
 `audit_log` entry with the actor, project, and endpoint id and name. Entries
 never contain the token or URL. Request logs record the route pattern
 (`/h/{token}`, or `unmatched`), never the raw path, so tokens do not reach logs.
+
+## Webhook ingestion (`/h/*`)
+
+The public receiving URL of an endpoint is `{INGEST_BASE_URL}/h/{token}`
+(`INGEST_BASE_URL` defaults to `APP_ORIGIN`). It needs no authentication: the
+unguessable token is the credential. Anything after the token is kept as the
+event's path, so `/h/{token}/orders/42?x=1` is stored with path `/orders/42`.
+
+Ingestion never reads the dashboard session cookie, sets no cookies or CORS
+headers, and cannot read or change stored events.
+
+```sh
+curl -X POST "$ENDPOINT_URL" -H 'Content-Type: application/json' -d '{"hello":"relaylab"}'
+```
+
+```json
+{ "ok": true, "event_id": "019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b" }
+```
+
+The acknowledgement is sent only after the event is committed to the database
+(`Cache-Control: no-store`, with `X-Request-ID`). `HEAD` gets the same status
+with no body.
+
+**What is stored.** Method, path after the token, raw query string and parsed
+parameters, every header (sorted by name; repeated headers keep their order),
+content type, the body bytes exactly as received, body size, receive time
+(UTC), the client address truncated to IPv4 /24 or IPv6 /48, the user agent,
+and the request id. A JSON body with a JSON content type is also stored parsed.
+Any content type is accepted; other bodies are stored as raw bytes and marked
+`utf8` or `binary`.
+
+**Redaction on arrival.** Before an event is stored, logged, or published,
+the values of credential headers and query parameters are replaced with
+`[REDACTED]`; the names stay visible. Built in: the headers `Authorization`,
+`Proxy-Authorization`, `Cookie`, `Set-Cookie`, `X-Api-Key`, `Api-Key`,
+`X-Auth-Token`, `X-Access-Token`, `X-CSRF-Token`, `X-Amz-Security-Token`, and
+`X-Goog-Api-Key`; the query parameters `key`, `code`, `sig`, `auth`, and
+`signature`; and any header or parameter whose name contains `token`,
+`secret`, `password`, `passwd`, `api-key`, `apikey`, `api_key`, `signature`,
+`credential`, `session`, or `hmac` (this covers provider signature headers such
+as `Stripe-Signature`, `X-Hub-Signature-256`, and `X-Shopify-Hmac-Sha256`).
+`INGEST_REDACT_EXTRA_HEADERS` and `INGEST_REDACT_EXTRA_PARAMS` add names; they
+cannot remove built-in ones. Request **bodies are not redacted**: they are
+stored exactly as sent, so they may contain confidential or personal data.
+
+| Method | Supported |
+|---|---|
+| `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS` | Yes |
+| Anything else (`TRACE`, `CONNECT`, …) | No: `405` with `Allow` |
+
+| Status | Code | When |
+|---|---|---|
+| 200 | — | Stored; body `{"ok":true,"event_id":"…"}` |
+| 400 | `invalid_request` | The body could not be read (for example, the client disconnected) |
+| 404 | `endpoint_not_found` | Unknown, rotated-away, deleted, or malformed token. Reveals nothing about projects or users |
+| 405 | `method_not_allowed` | Unsupported method |
+| 408 | `request_timeout` | The body did not arrive within `LIMIT_INGEST_BODY_TIMEOUT_SECONDS` (10 s) |
+| 410 | `endpoint_disabled` | The endpoint is disabled |
+| 413 | `payload_too_large` | Body over `LIMIT_INGEST_MAX_BODY_BYTES` (256 KiB; at most 1 MiB). A body of exactly the limit is accepted |
+| 414 | `uri_too_long` | Path after the token over 2048 characters, or query string over 8192 |
+| 429 | `rate_limited` | Rate limit exceeded; see `Retry-After` (seconds) |
+| 431 | `headers_too_large` | Headers over `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB) or more than `LIMIT_INGEST_MAX_HEADER_FIELDS` (100) fields |
+| 503 | `unavailable` | The event could not be stored; nothing was acknowledged. Safe to retry |
+
+Rejected requests are never stored. Headers must arrive within 5 seconds.
+
+**Rate limits** (per API instance, so the effective limit is roughly instances
+× limit): `LIMIT_INGEST_RATE_PER_ENDPOINT_PER_MINUTE` (60, burst
+`LIMIT_INGEST_RATE_ENDPOINT_BURST` 30) per endpoint, and
+`LIMIT_INGEST_RATE_PER_IP_PER_MINUTE` (120, burst `LIMIT_INGEST_RATE_IP_BURST`
+60) per client IP. The per-IP limit also counts requests to unknown tokens.
+Forwarding headers such as `X-Forwarded-For` are used for the client address
+only when the direct peer is in `TRUSTED_PROXY_CIDRS`.
+
+**Metrics.** With `METRICS_ADDR` set, `GET /metrics` on that separate listener
+serves `ingest_requests_total{outcome}`, `ingest_duration_seconds`, and
+`ingest_body_bytes`. Outcomes: `accepted`, `rejected_size`, `rejected_rate`,
+`rejected_method`, `rejected_timeout`, `rejected_invalid`, `not_found`,
+`disabled`, `error`. `/metrics` is never served on the public port (404).
 
 ## Authentication (`/api/auth/*`)
 

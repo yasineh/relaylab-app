@@ -270,10 +270,16 @@ func (h *Handler) readBody(w http.ResponseWriter, r *http.Request) (body []byte,
 	}
 }
 
+// ack is the success body; a struct keeps "ok" first, as documented.
+type ack struct {
+	OK      bool   `json:"ok"`
+	EventID string `json:"event_id"`
+}
+
 func (h *Handler) respond(w http.ResponseWriter, r *http.Request, res result) {
 	w.Header().Set("Cache-Control", "no-store")
 	if res.status == http.StatusOK {
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "event_id": res.eventID.String()})
+		httpx.WriteJSON(w, http.StatusOK, ack{OK: true, EventID: res.eventID.String()})
 		return
 	}
 	switch res.status {

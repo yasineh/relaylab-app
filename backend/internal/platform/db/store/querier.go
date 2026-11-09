@@ -29,6 +29,10 @@ type Querier interface {
 	// by the token from a signature-verified cookie (design decision 2, option A).
 	GetSessionByToken(ctx context.Context, token string) (GetSessionByTokenRow, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	// Webhook event queries. Ingestion runs these without an owner: the endpoint
+	// token is the capability, and endpoint_id/project_id come from the token
+	// lookup, never from the request.
+	InsertEvent(ctx context.Context, arg InsertEventParams) error
 	ListEndpoints(ctx context.Context, arg ListEndpointsParams) ([]ListEndpointsRow, error)
 	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
 	// Endpoint queries. Every dashboard query is scoped to the owner by joining
@@ -40,9 +44,13 @@ type Querier interface {
 	// Serialises creates per owner for the limit check (the user row lives in the
 	// auth schema, where the api cannot take row locks).
 	LockOwnerProjects(ctx context.Context, ownerID string) error
+	// Delivered to listeners only when the surrounding transaction commits.
+	NotifyEvent(ctx context.Context, payload string) error
 	// Readiness probe: a trivial round trip using the runtime role.
 	Ping(ctx context.Context) (int32, error)
 	RotateEndpointToken(ctx context.Context, arg RotateEndpointTokenParams) (RotateEndpointTokenRow, error)
+	// Never moves last_received_at backwards when requests commit out of order.
+	TouchEndpointReceived(ctx context.Context, arg TouchEndpointReceivedParams) error
 	// NULL arguments keep the current value.
 	UpdateEndpoint(ctx context.Context, arg UpdateEndpointParams) (UpdateEndpointRow, error)
 	// NULL arguments keep the current value; set_description distinguishes

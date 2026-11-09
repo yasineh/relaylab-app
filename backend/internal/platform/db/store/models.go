@@ -5,6 +5,8 @@
 package store
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -43,6 +45,29 @@ type AppProject struct {
 	Description pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+}
+
+// Accepted webhook requests; sensitive header and query values redacted before insert, body stored as received
+type AppWebhookEvent struct {
+	ID                  pgtype.UUID
+	EndpointID          pgtype.UUID
+	ProjectID           pgtype.UUID
+	ReceivedAt          pgtype.Timestamptz
+	Method              string
+	Path                string
+	RawQuery            string
+	QueryParams         []byte
+	Headers             []byte
+	RedactedHeaderCount int16
+	ContentType         pgtype.Text
+	Body                []byte
+	BodySize            int32
+	BodyEncoding        string
+	BodyJson            []byte
+	JsonInvalid         bool
+	SourceIpPrefix      *netip.Addr
+	UserAgent           pgtype.Text
+	CorrelationID       string
 }
 
 type AuthSession struct {

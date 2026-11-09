@@ -196,3 +196,73 @@ func TestDeletingAuthUserDeletesTheirProjects(t *testing.T) {
 		t.Fatalf("after deleting user: gone=%d kept=%d", gone, kept)
 	}
 }
+
+// TestWebhookEventConstraints checks the webhook_events integrity rules: the
+// denormalized project_id must match the endpoint's project, body_size must
+// match the stored bytes, and deleting an endpoint removes its events.
+func TestWebhookEventConstraints(t *testing.T) {
+	d := dbtest.New(t)
+	authtest.Prepare(t, d)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, config.NewSecret(d.MigratorURL), quiet); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := pgx.Connect(ctx, d.AdminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = admin.Close(ctx) }()
+	app, err := pgx.Connect(ctx, d.RuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = app.Close(ctx) }()
+
+	if _, err := admin.Exec(ctx, `INSERT INTO auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+		VALUES ('u1', 'U', 'u1@example.test', true, now(), now())`); err != nil {
+		t.Fatal(err)
+	}
+	var p1, p2, e1 string
+	for _, p := range []*string{&p1, &p2} {
+		if err := app.QueryRow(ctx, `INSERT INTO app.projects (id, owner_id, name) VALUES (gen_random_uuid(), 'u1', 'p') RETURNING id::text`).Scan(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := app.QueryRow(ctx, `INSERT INTO app.endpoints (id, project_id, name, token_hash, token_ciphertext)
+		VALUES (gen_random_uuid(), $1, 'e', sha256('t'::bytea), '\x00') RETURNING id::text`, p1).Scan(&e1); err != nil {
+		t.Fatal(err)
+	}
+
+	insert := func(project string, body []byte, size int) error {
+		_, err := app.Exec(ctx, `INSERT INTO app.webhook_events
+			(id, endpoint_id, project_id, received_at, method, path, query_params, headers, body, body_size, body_encoding, correlation_id)
+			VALUES (gen_random_uuid(), $1, $2, now(), 'POST', '', '{}', '[]', $3, $4, 'binary', 'req-1')`,
+			e1, project, body, size)
+		return err
+	}
+	wantViolation := func(name string, err error, code string) {
+		t.Helper()
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != code {
+			t.Fatalf("%s: want SQLSTATE %s, got %v", name, code, err)
+		}
+	}
+
+	if err := insert(p1, []byte{0xff, 0xfe, 0x00}, 3); err != nil {
+		t.Fatalf("valid event rejected: %v", err)
+	}
+	wantViolation("event in another project", insert(p2, []byte{}, 0), "23503")
+	wantViolation("body_size mismatch", insert(p1, []byte("abc"), 2), "23514")
+
+	// Deleting the endpoint removes its events.
+	if _, err := app.Exec(ctx, `DELETE FROM app.endpoints WHERE id = $1`, e1); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := app.QueryRow(ctx, `SELECT count(*) FROM app.webhook_events`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("events left after endpoint delete: %d", n)
+	}
+}

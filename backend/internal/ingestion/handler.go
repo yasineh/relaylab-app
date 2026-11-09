@@ -196,17 +196,16 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request, start time.Time
 		return res
 	}
 
-	body, bodyErr := h.readBody(w, r)
-	if bodyErr != nil {
-		res := bodyErr.(bodyError).res
-		res.endpointID = ep.ID
-		return res
+	body, rejected, ok := h.readBody(w, r)
+	if !ok {
+		rejected.endpointID = ep.ID
+		return rejected
 	}
 
 	prefix := "/h/" + tok
-	c, ok := capture(r, strings.TrimPrefix(r.URL.Path, prefix), strings.TrimPrefix(r.URL.EscapedPath(), prefix),
+	c, captureOK := capture(r, strings.TrimPrefix(r.URL.Path, prefix), strings.TrimPrefix(r.URL.EscapedPath(), prefix),
 		h.o.Redactor, clientIP, haveIP)
-	if !ok {
+	if !captureOK {
 		res := errURI
 		res.endpointID = ep.ID
 		return res
@@ -248,30 +247,26 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request, start time.Time
 	return result{status: http.StatusOK, outcome: outcomeAccepted, endpointID: ep.ID, eventID: ev.ID, bodySize: len(body)}
 }
 
-type bodyError struct{ res result }
-
-func (e bodyError) Error() string { return e.res.code }
-
 // readBody reads the whole body within the size and time limits. Bodies of
-// exactly MaxBodyBytes are accepted.
-func (h *Handler) readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+// exactly MaxBodyBytes are accepted. When ok is false, the result says why.
+func (h *Handler) readBody(w http.ResponseWriter, r *http.Request) (body []byte, rejected result, ok bool) {
 	rc := http.NewResponseController(w)
 	_ = rc.SetReadDeadline(time.Now().Add(h.o.BodyTimeout)) // unsupported in some test writers
 	defer func() { _ = rc.SetReadDeadline(time.Time{}) }()
 
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, int64(h.o.MaxBodyBytes)))
 	if err == nil {
-		return body, nil
+		return body, result{}, true
 	}
 	var tooLarge *http.MaxBytesError
 	var netErr net.Error
 	switch {
 	case errors.As(err, &tooLarge):
-		return nil, bodyError{errTooLarge}
+		return nil, errTooLarge, false
 	case errors.Is(err, os.ErrDeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout()):
-		return nil, bodyError{errTimeout}
+		return nil, errTimeout, false
 	default:
-		return nil, bodyError{errBadBody}
+		return nil, errBadBody, false
 	}
 }
 

@@ -188,7 +188,7 @@ func TestAllAllowedMethodsAndHeadHasNoBody(t *testing.T) {
 	}
 	b, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
-	if resp.StatusCode != 200 || len(b) != 0 {
+	if resp.StatusCode != http.StatusOK || len(b) != 0 {
 		t.Fatalf("HEAD %d body %q", resp.StatusCode, b)
 	}
 }
@@ -248,7 +248,7 @@ func TestBodyLimits(t *testing.T) {
 	}
 	// Declared too large: rejected before reading or looking up.
 	lookups := f.store.lookups
-	req := httptest.NewRequest("POST", "/h/"+f.token, strings.NewReader("small"))
+	req := httptest.NewRequest(http.MethodPost, "/h/"+f.token, strings.NewReader("small"))
 	req.ContentLength = testMaxBody + 1
 	rec := httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
@@ -256,7 +256,7 @@ func TestBodyLimits(t *testing.T) {
 		t.Fatalf("content-length: %d lookups +%d", rec.Code, f.store.lookups-lookups)
 	}
 	// Chunked (unknown length) over the limit stops at the limit.
-	req = httptest.NewRequest("POST", "/h/"+f.token, io.MultiReader(bytes.NewReader(make([]byte, testMaxBody)), strings.NewReader("!")))
+	req = httptest.NewRequest(http.MethodPost, "/h/"+f.token, io.MultiReader(bytes.NewReader(make([]byte, testMaxBody)), strings.NewReader("!")))
 	req.ContentLength = -1
 	rec = httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
@@ -362,7 +362,7 @@ func TestSlowBodyTimesOut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("no response: %v", err)
 	}
-	if resp.StatusCode != 408 {
+	if resp.StatusCode != http.StatusRequestTimeout {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	if len(f.store.saved) != 0 {
@@ -372,13 +372,13 @@ func TestSlowBodyTimesOut(t *testing.T) {
 
 func TestSeparateIngestHost(t *testing.T) {
 	f := newFixture(t, func(o *Options) { o.IngestHost = "in.relaylab.test" })
-	req := httptest.NewRequest("POST", "http://app.relaylab.test/h/"+f.token, nil)
+	req := httptest.NewRequest(http.MethodPost, "http://app.relaylab.test/h/"+f.token, nil)
 	rec := httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
 	if rec.Code != 404 {
 		t.Fatalf("app host: %d", rec.Code)
 	}
-	req = httptest.NewRequest("POST", "http://IN.relaylab.test:443/h/"+f.token, nil)
+	req = httptest.NewRequest(http.MethodPost, "http://IN.relaylab.test:443/h/"+f.token, nil)
 	rec = httptest.NewRecorder()
 	f.router.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -389,7 +389,7 @@ func TestSeparateIngestHost(t *testing.T) {
 func TestMetricsByOutcome(t *testing.T) {
 	f := newFixture(t, nil)
 	f.do("POST", "/h/"+f.token, strings.NewReader("ok"))
-	req := httptest.NewRequest("POST", "/h/"+f.token, nil)
+	req := httptest.NewRequest(http.MethodPost, "/h/"+f.token, nil)
 	req.ContentLength = testMaxBody + 1
 	f.router.ServeHTTP(httptest.NewRecorder(), req)
 	if got := testutil.ToFloat64(f.metrics.requests.WithLabelValues(outcomeAccepted)); got != 1 {

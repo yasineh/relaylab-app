@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 	"relaylab/internal/endpoints"
 	"relaylab/internal/identity"
+	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
@@ -38,7 +40,11 @@ const (
 // sessionStore is an in-memory stand-in for the auth."session" lookup.
 type sessionStore map[string]store.GetSessionByTokenRow
 
+// sessionLookups counts session lookups across tests that inspect it.
+var sessionLookups atomic.Int64
+
 func (s sessionStore) GetSessionByToken(_ context.Context, token string) (store.GetSessionByTokenRow, error) {
+	sessionLookups.Add(1)
 	if r, ok := s[token]; ok {
 		return r, nil
 	}
@@ -54,8 +60,9 @@ func validCookie() *http.Cookie {
 }
 
 type routerOpts struct {
-	web      http.Handler
-	upstream http.Handler // fake auth service
+	web       http.Handler
+	upstream  http.Handler       // fake auth service
+	ingestion *ingestion.Handler // nil: /h is not mounted
 }
 
 func testRouter(t *testing.T, web http.Handler) http.Handler {
@@ -104,6 +111,7 @@ func testRouterWith(t *testing.T, o routerOpts) http.Handler {
 		}),
 		projects:  projects.NewHandler(projects.NewService(nil, 20)), // not called by these tests
 		endpoints: endpoints.NewHandler(endpoints.NewService(nil, nil, "", 25)),
+		ingestion: o.ingestion,
 		web:       o.web,
 	})
 }

@@ -136,5 +136,6 @@ func isSPAPath(r *http.Request) bool {
 			return false
 		}
 	}
-	return p != "/healthz" && p != "/readyz"
+	// /metrics is served only on the private METRICS_ADDR listener; here it is a 404.
+	return p != "/healthz" && p != "/readyz" && p != "/metrics"
 }

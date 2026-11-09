@@ -2,6 +2,7 @@ package token
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -101,21 +102,21 @@ func TestOpenRejectsTamperingWrongRowAndWrongKey(t *testing.T) {
 	for i := range sealed {
 		bad := bytes.Clone(sealed)
 		bad[i] ^= 0x01
-		if _, err := k.Open(bad, AAD(p, e)); err != ErrDecrypt {
+		if _, err := k.Open(bad, AAD(p, e)); !errors.Is(err, ErrDecrypt) {
 			t.Fatalf("tampered byte %d: %v", i, err)
 		}
 	}
 	other := uuid.Must(uuid.NewV7())
-	if _, err := k.Open(sealed, AAD(p, other)); err != ErrDecrypt {
+	if _, err := k.Open(sealed, AAD(p, other)); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("swapped endpoint id: %v", err)
 	}
-	if _, err := k.Open(sealed, AAD(other, e)); err != ErrDecrypt {
+	if _, err := k.Open(sealed, AAD(other, e)); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("swapped project id: %v", err)
 	}
-	if _, err := testKeys(t, 9).Open(sealed, AAD(p, e)); err != ErrDecrypt {
+	if _, err := testKeys(t, 9).Open(sealed, AAD(p, e)); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("wrong key: %v", err)
 	}
-	if _, err := k.Open(sealed[:10], AAD(p, e)); err != ErrDecrypt {
+	if _, err := k.Open(sealed[:10], AAD(p, e)); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("truncated: %v", err)
 	}
 }

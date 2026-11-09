@@ -186,8 +186,12 @@ func TestDeletingAuthUserDeletesTheirProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	var gone, kept int
-	_ = appConn.QueryRow(ctx, `SELECT count(*) FROM app.projects WHERE owner_id = 'gone'`).Scan(&gone)
-	_ = appConn.QueryRow(ctx, `SELECT count(*) FROM app.projects WHERE owner_id = 'keep'`).Scan(&kept)
+	if err := appConn.QueryRow(ctx, `SELECT count(*) FROM app.projects WHERE owner_id = 'gone'`).Scan(&gone); err != nil {
+		t.Fatalf("count deleted user's projects: %v", err)
+	}
+	if err := appConn.QueryRow(ctx, `SELECT count(*) FROM app.projects WHERE owner_id = 'keep'`).Scan(&kept); err != nil {
+		t.Fatalf("count kept user's projects: %v", err)
+	}
 	if gone != 0 || kept != 1 {
 		t.Fatalf("after deleting user: gone=%d kept=%d", gone, kept)
 	}

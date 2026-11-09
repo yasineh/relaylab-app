@@ -12,6 +12,92 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getEvent = `-- name: GetEvent :one
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.raw_query, e.query_params, e.headers, e.redacted_header_count, e.content_type,
+       e.body, e.body_size, e.body_encoding, e.body_json, e.json_invalid,
+       e.source_ip_prefix, e.user_agent, e.correlation_id
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.id = $1 AND e.project_id = $2 AND p.owner_id = $3
+`
+
+type GetEventParams struct {
+	ID        pgtype.UUID
+	ProjectID pgtype.UUID
+	OwnerID   string
+}
+
+type GetEventRow struct {
+	ID                  pgtype.UUID
+	EndpointID          pgtype.UUID
+	EndpointName        string
+	ReceivedAt          pgtype.Timestamptz
+	Method              string
+	Path                string
+	RawQuery            string
+	QueryParams         []byte
+	Headers             []byte
+	RedactedHeaderCount int16
+	ContentType         pgtype.Text
+	Body                []byte
+	BodySize            int32
+	BodyEncoding        string
+	BodyJson            []byte
+	JsonInvalid         bool
+	SourceIpPrefix      *netip.Addr
+	UserAgent           pgtype.Text
+	CorrelationID       string
+}
+
+func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error) {
+	row := q.db.QueryRow(ctx, getEvent, arg.ID, arg.ProjectID, arg.OwnerID)
+	var i GetEventRow
+	err := row.Scan(
+		&i.ID,
+		&i.EndpointID,
+		&i.EndpointName,
+		&i.ReceivedAt,
+		&i.Method,
+		&i.Path,
+		&i.RawQuery,
+		&i.QueryParams,
+		&i.Headers,
+		&i.RedactedHeaderCount,
+		&i.ContentType,
+		&i.Body,
+		&i.BodySize,
+		&i.BodyEncoding,
+		&i.BodyJson,
+		&i.JsonInvalid,
+		&i.SourceIpPrefix,
+		&i.UserAgent,
+		&i.CorrelationID,
+	)
+	return i, err
+}
+
+const getEventBody = `-- name: GetEventBody :one
+SELECT e.body
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+WHERE e.id = $1 AND e.project_id = $2 AND p.owner_id = $3
+`
+
+type GetEventBodyParams struct {
+	ID        pgtype.UUID
+	ProjectID pgtype.UUID
+	OwnerID   string
+}
+
+func (q *Queries) GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getEventBody, arg.ID, arg.ProjectID, arg.OwnerID)
+	var body []byte
+	err := row.Scan(&body)
+	return body, err
+}
+
 const insertEvent = `-- name: InsertEvent :exec
 
 INSERT INTO app.webhook_events (
@@ -73,6 +159,335 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error 
 		arg.CorrelationID,
 	)
 	return err
+}
+
+const listEndpointEventsAsc = `-- name: ListEndpointEventsAsc :many
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.endpoint_id = $1 AND e.project_id = $2 AND p.owner_id = $3
+  AND e.id > $4 AND e.id < $5
+  AND (cardinality($6::text[]) = 0 OR e.method = ANY($6::text[]))
+  AND ($7::timestamptz IS NULL OR e.received_at >= $7::timestamptz)
+  AND ($8::timestamptz IS NULL OR e.received_at < $8::timestamptz)
+  AND ($9::text IS NULL OR e.content_type ILIKE $9::text ESCAPE '\')
+ORDER BY e.id ASC
+LIMIT $10
+`
+
+type ListEndpointEventsAscParams struct {
+	EndpointID         pgtype.UUID
+	ProjectID          pgtype.UUID
+	OwnerID            string
+	AfterID            pgtype.UUID
+	BeforeID           pgtype.UUID
+	Methods            []string
+	ReceivedAfter      pgtype.Timestamptz
+	ReceivedBefore     pgtype.Timestamptz
+	ContentTypePattern pgtype.Text
+	RowLimit           int32
+}
+
+type ListEndpointEventsAscRow struct {
+	ID           pgtype.UUID
+	EndpointID   pgtype.UUID
+	EndpointName string
+	ReceivedAt   pgtype.Timestamptz
+	Method       string
+	Path         string
+	ContentType  pgtype.Text
+	BodySize     int32
+}
+
+func (q *Queries) ListEndpointEventsAsc(ctx context.Context, arg ListEndpointEventsAscParams) ([]ListEndpointEventsAscRow, error) {
+	rows, err := q.db.Query(ctx, listEndpointEventsAsc,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.OwnerID,
+		arg.AfterID,
+		arg.BeforeID,
+		arg.Methods,
+		arg.ReceivedAfter,
+		arg.ReceivedBefore,
+		arg.ContentTypePattern,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEndpointEventsAscRow{}
+	for rows.Next() {
+		var i ListEndpointEventsAscRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.EndpointName,
+			&i.ReceivedAt,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEndpointEventsDesc = `-- name: ListEndpointEventsDesc :many
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.endpoint_id = $1 AND e.project_id = $2 AND p.owner_id = $3
+  AND e.id > $4 AND e.id < $5
+  AND (cardinality($6::text[]) = 0 OR e.method = ANY($6::text[]))
+  AND ($7::timestamptz IS NULL OR e.received_at >= $7::timestamptz)
+  AND ($8::timestamptz IS NULL OR e.received_at < $8::timestamptz)
+  AND ($9::text IS NULL OR e.content_type ILIKE $9::text ESCAPE '\')
+ORDER BY e.id DESC
+LIMIT $10
+`
+
+type ListEndpointEventsDescParams struct {
+	EndpointID         pgtype.UUID
+	ProjectID          pgtype.UUID
+	OwnerID            string
+	AfterID            pgtype.UUID
+	BeforeID           pgtype.UUID
+	Methods            []string
+	ReceivedAfter      pgtype.Timestamptz
+	ReceivedBefore     pgtype.Timestamptz
+	ContentTypePattern pgtype.Text
+	RowLimit           int32
+}
+
+type ListEndpointEventsDescRow struct {
+	ID           pgtype.UUID
+	EndpointID   pgtype.UUID
+	EndpointName string
+	ReceivedAt   pgtype.Timestamptz
+	Method       string
+	Path         string
+	ContentType  pgtype.Text
+	BodySize     int32
+}
+
+func (q *Queries) ListEndpointEventsDesc(ctx context.Context, arg ListEndpointEventsDescParams) ([]ListEndpointEventsDescRow, error) {
+	rows, err := q.db.Query(ctx, listEndpointEventsDesc,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.OwnerID,
+		arg.AfterID,
+		arg.BeforeID,
+		arg.Methods,
+		arg.ReceivedAfter,
+		arg.ReceivedBefore,
+		arg.ContentTypePattern,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEndpointEventsDescRow{}
+	for rows.Next() {
+		var i ListEndpointEventsDescRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.EndpointName,
+			&i.ReceivedAt,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventsAsc = `-- name: ListEventsAsc :many
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.project_id = $1 AND p.owner_id = $2
+  AND e.id > $3 AND e.id < $4
+  AND (cardinality($5::text[]) = 0 OR e.method = ANY($5::text[]))
+  AND ($6::timestamptz IS NULL OR e.received_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR e.received_at < $7::timestamptz)
+  AND ($8::text IS NULL OR e.content_type ILIKE $8::text ESCAPE '\')
+ORDER BY e.id ASC
+LIMIT $9
+`
+
+type ListEventsAscParams struct {
+	ProjectID          pgtype.UUID
+	OwnerID            string
+	AfterID            pgtype.UUID
+	BeforeID           pgtype.UUID
+	Methods            []string
+	ReceivedAfter      pgtype.Timestamptz
+	ReceivedBefore     pgtype.Timestamptz
+	ContentTypePattern pgtype.Text
+	RowLimit           int32
+}
+
+type ListEventsAscRow struct {
+	ID           pgtype.UUID
+	EndpointID   pgtype.UUID
+	EndpointName string
+	ReceivedAt   pgtype.Timestamptz
+	Method       string
+	Path         string
+	ContentType  pgtype.Text
+	BodySize     int32
+}
+
+func (q *Queries) ListEventsAsc(ctx context.Context, arg ListEventsAscParams) ([]ListEventsAscRow, error) {
+	rows, err := q.db.Query(ctx, listEventsAsc,
+		arg.ProjectID,
+		arg.OwnerID,
+		arg.AfterID,
+		arg.BeforeID,
+		arg.Methods,
+		arg.ReceivedAfter,
+		arg.ReceivedBefore,
+		arg.ContentTypePattern,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEventsAscRow{}
+	for rows.Next() {
+		var i ListEventsAscRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.EndpointName,
+			&i.ReceivedAt,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventsDesc = `-- name: ListEventsDesc :many
+
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.project_id = $1 AND p.owner_id = $2
+  AND e.id > $3 AND e.id < $4
+  AND (cardinality($5::text[]) = 0 OR e.method = ANY($5::text[]))
+  AND ($6::timestamptz IS NULL OR e.received_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR e.received_at < $7::timestamptz)
+  AND ($8::text IS NULL OR e.content_type ILIKE $8::text ESCAPE '\')
+ORDER BY e.id DESC
+LIMIT $9
+`
+
+type ListEventsDescParams struct {
+	ProjectID          pgtype.UUID
+	OwnerID            string
+	AfterID            pgtype.UUID
+	BeforeID           pgtype.UUID
+	Methods            []string
+	ReceivedAfter      pgtype.Timestamptz
+	ReceivedBefore     pgtype.Timestamptz
+	ContentTypePattern pgtype.Text
+	RowLimit           int32
+}
+
+type ListEventsDescRow struct {
+	ID           pgtype.UUID
+	EndpointID   pgtype.UUID
+	EndpointName string
+	ReceivedAt   pgtype.Timestamptz
+	Method       string
+	Path         string
+	ContentType  pgtype.Text
+	BodySize     int32
+}
+
+// Explorer queries (add-event-explorer). Every query is owner-scoped by joining
+// app.projects (owner_id = the session user).
+//
+// after_id and before_id are exclusive id bounds that are always set: the
+// service folds the cursor and the received-time filters into them, using the
+// nil and max UUIDs when unbounded. Keeping them non-NULL lets a cached
+// generic plan still use (project_id, id) and (endpoint_id, id) as index
+// conditions. The NULL-or optional filters below only narrow rows inside that
+// range. received_after is inclusive and received_before exclusive.
+// The ASC and DESC variants differ only in ORDER BY, and the ByEndpoint
+// variants only in the endpoint condition, so the planner can pick the
+// endpoint index.
+func (q *Queries) ListEventsDesc(ctx context.Context, arg ListEventsDescParams) ([]ListEventsDescRow, error) {
+	rows, err := q.db.Query(ctx, listEventsDesc,
+		arg.ProjectID,
+		arg.OwnerID,
+		arg.AfterID,
+		arg.BeforeID,
+		arg.Methods,
+		arg.ReceivedAfter,
+		arg.ReceivedBefore,
+		arg.ContentTypePattern,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEventsDescRow{}
+	for rows.Next() {
+		var i ListEventsDescRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.EndpointName,
+			&i.ReceivedAt,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const notifyEvent = `-- name: NotifyEvent :exec

@@ -24,6 +24,8 @@ type Querier interface {
 	GetEndpoint(ctx context.Context, arg GetEndpointParams) (GetEndpointRow, error)
 	// Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
 	GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error)
+	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
+	GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]byte, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)
 	// The only query Go runs against Better Auth's tables: read-only session lookup
 	// by the token from a signature-verified cookie (design decision 2, option A).
@@ -33,7 +35,23 @@ type Querier interface {
 	// token is the capability, and endpoint_id/project_id come from the token
 	// lookup, never from the request.
 	InsertEvent(ctx context.Context, arg InsertEventParams) error
+	ListEndpointEventsAsc(ctx context.Context, arg ListEndpointEventsAscParams) ([]ListEndpointEventsAscRow, error)
+	ListEndpointEventsDesc(ctx context.Context, arg ListEndpointEventsDescParams) ([]ListEndpointEventsDescRow, error)
 	ListEndpoints(ctx context.Context, arg ListEndpointsParams) ([]ListEndpointsRow, error)
+	ListEventsAsc(ctx context.Context, arg ListEventsAscParams) ([]ListEventsAscRow, error)
+	// Explorer queries (add-event-explorer). Every query is owner-scoped by joining
+	// app.projects (owner_id = the session user).
+	//
+	// after_id and before_id are exclusive id bounds that are always set: the
+	// service folds the cursor and the received-time filters into them, using the
+	// nil and max UUIDs when unbounded. Keeping them non-NULL lets a cached
+	// generic plan still use (project_id, id) and (endpoint_id, id) as index
+	// conditions. The NULL-or optional filters below only narrow rows inside that
+	// range. received_after is inclusive and received_before exclusive.
+	// The ASC and DESC variants differ only in ORDER BY, and the ByEndpoint
+	// variants only in the endpoint condition, so the planner can pick the
+	// endpoint index.
+	ListEventsDesc(ctx context.Context, arg ListEventsDescParams) ([]ListEventsDescRow, error)
 	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
 	// Endpoint queries. Every dashboard query is scoped to the owner by joining
 	// app.projects (owner_id = the session user). Only GetEndpointByTokenHash, used

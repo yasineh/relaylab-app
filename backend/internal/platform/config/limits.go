@@ -19,6 +19,8 @@ type Limits struct {
 	AuthProxyTimeoutSeconds int
 	// ProjectsPerUser caps how many projects one user may own (409 project_limit_reached).
 	ProjectsPerUser int
+	// EndpointsPerProject caps endpoints per project (409 endpoint_limit_reached).
+	EndpointsPerProject int
 }
 
 type limitSpec struct {
@@ -53,6 +55,12 @@ var limitSpecs = []limitSpec{
 		def:  20,
 		doc:  "Maximum number of projects one user may own",
 		bind: func(l *Limits) *int { return &l.ProjectsPerUser },
+	},
+	{
+		env:  "LIMIT_ENDPOINTS_PER_PROJECT",
+		def:  25,
+		doc:  "Maximum number of webhook endpoints in one project",
+		bind: func(l *Limits) *int { return &l.EndpointsPerProject },
 	},
 }
 

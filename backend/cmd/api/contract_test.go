@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"relaylab/internal/endpoints"
 	"relaylab/internal/identity"
 	"relaylab/internal/identity/authtest"
 	"relaylab/internal/platform/config"
@@ -79,7 +80,8 @@ func newContractEnv(t *testing.T, authEnv ...string) *contractEnv {
 			Target: authCfg.ServiceURL, Secret: authCfg.ProxySharedSecret,
 			Timeout: 10 * time.Second, ForwardedTo: cfg.AppOrigin.Scheme,
 		}),
-		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
+		projects:  projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
+		endpoints: endpoints.NewHandler(endpoints.NewService(pool, nil, "", 25)), // not exercised here
 	}))
 	t.Cleanup(api.Close)
 

@@ -316,3 +316,24 @@ func TestGracefulShutdownCompletesInFlight(t *testing.T) {
 		t.Fatal("server still accepting after shutdown")
 	}
 }
+
+func TestAccessLogNeverRecordsIngestTokens(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	r := chi.NewRouter()
+	r.Use(RequestIDMiddleware(logger), AccessLog)
+	r.Post("/h/{token}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
+
+	const tok = "Zx9QwErTy7UiOp3AsDfGhJkL1ZxCvBnM5QwErTy7Ui0"
+	for _, path := range []string{"/h/" + tok, "/h/" + tok + "/extra?sig=" + tok, "/unrouted/" + tok} {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	out := buf.String()
+	if strings.Contains(out, tok) {
+		t.Fatalf("access log contains the token: %s", out)
+	}
+	if !strings.Contains(out, `"route":"/h/{token}"`) || !strings.Contains(out, `"route":"unmatched"`) {
+		t.Fatalf("expected route patterns, got: %s", out)
+	}
+}

@@ -6,25 +6,45 @@ package store
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	CountEndpoints(ctx context.Context, projectID pgtype.UUID) (int32, error)
 	CountProjects(ctx context.Context, ownerID string) (int32, error)
+	CreateEndpoint(ctx context.Context, arg CreateEndpointParams) (CreateEndpointRow, error)
 	// Every query is scoped by owner_id: there is deliberately no query that loads
 	// a project by id alone (ownership is enforced in the data layer too).
 	CreateProject(ctx context.Context, arg CreateProjectParams) (AppProject, error)
+	// One statement; the endpoint's events and replays go by FK cascade.
+	DeleteEndpoint(ctx context.Context, arg DeleteEndpointParams) (DeleteEndpointRow, error)
 	// One statement; everything scoped to the project goes by FK cascade.
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
+	GetEndpoint(ctx context.Context, arg GetEndpointParams) (GetEndpointRow, error)
+	// Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
+	GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)
 	// The only query Go runs against Better Auth's tables: read-only session lookup
 	// by the token from a signature-verified cookie (design decision 2, option A).
 	GetSessionByToken(ctx context.Context, token string) (GetSessionByTokenRow, error)
+	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	ListEndpoints(ctx context.Context, arg ListEndpointsParams) ([]ListEndpointsRow, error)
 	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
+	// Endpoint queries. Every dashboard query is scoped to the owner by joining
+	// app.projects (owner_id = the session user). Only GetEndpointByTokenHash, used
+	// by public ingestion, looks endpoints up without an owner: the token is the
+	// capability.
+	// Confirms ownership and serialises endpoint creation per project (limit check).
+	LockOwnedProject(ctx context.Context, arg LockOwnedProjectParams) (pgtype.UUID, error)
 	// Serialises creates per owner for the limit check (the user row lives in the
 	// auth schema, where the api cannot take row locks).
 	LockOwnerProjects(ctx context.Context, ownerID string) error
 	// Readiness probe: a trivial round trip using the runtime role.
 	Ping(ctx context.Context) (int32, error)
+	RotateEndpointToken(ctx context.Context, arg RotateEndpointTokenParams) (RotateEndpointTokenRow, error)
+	// NULL arguments keep the current value.
+	UpdateEndpoint(ctx context.Context, arg UpdateEndpointParams) (UpdateEndpointRow, error)
 	// NULL arguments keep the current value; set_description distinguishes
 	// "leave unchanged" from "clear the description".
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (AppProject, error)

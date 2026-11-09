@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"relaylab/internal/endpoints"
+	"relaylab/internal/endpoints/token"
 	"relaylab/internal/identity"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db"
@@ -69,6 +71,18 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	endpointCfg, err := config.LoadEndpoints(os.Getenv, cfg.Env, cfg.AppOrigin)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
+	tokenKeys, err := token.NewKeys(endpointCfg.HMACKey(), endpointCfg.EncKey(), 1)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid endpoint token keys", slog.String("error", err.Error()))
+		return 1
+	}
 	logger := logging.New(os.Stdout, "api", string(cfg.Env), cfg.LogLevel)
 	slog.SetDefault(logger)
 
@@ -102,7 +116,9 @@ func runServer() int {
 			ForwardedTo: cfg.AppOrigin.Scheme,
 		}),
 		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
-		web:      webHandler(),
+		endpoints: endpoints.NewHandler(endpoints.NewService(pool, tokenKeys,
+			endpointCfg.IngestBaseURL.String(), cfg.Limits.EndpointsPerProject)),
+		web: webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)
 

@@ -8,15 +8,41 @@ updated by every change that alters the schema.
 ## Current state
 
 The `auth` schema holds Better Auth's tables (users, sessions, credentials).
-The `app` schema holds `projects`, owned by `auth."user"` across schemas.
-Endpoints, events, and replays are added by later changes, each cascading from
-`app.projects`.
+The `app` schema holds `projects` (owned by `auth."user"` across schemas),
+their webhook `endpoints`, and the shared `audit_log`. Events and replays are
+added by later changes, each cascading from `app.projects`.
 
 ```mermaid
 erDiagram
   auth_user ||--o{ auth_session : "has"
   auth_user ||--o{ auth_account : "has"
   auth_user ||--o{ app_projects : "owns (cascade)"
+  app_projects ||--o{ app_endpoints : "has (cascade)"
+  app_projects ||--o{ app_audit_log : "has (cascade)"
+  auth_user |o--o{ app_audit_log : "actor (set null)"
+  app_endpoints {
+    uuid id PK "UUIDv7"
+    uuid project_id FK
+    text name "1-100 chars"
+    bytea token_hash UK "HMAC-SHA256"
+    bytea token_ciphertext "AES-256-GCM"
+    smallint token_key_version
+    boolean enabled
+    timestamptz last_received_at "nullable"
+    timestamptz token_rotated_at "nullable"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  app_audit_log {
+    uuid id PK "UUIDv7"
+    uuid project_id FK
+    text actor_user_id FK "nullable"
+    text action
+    text resource_type
+    uuid resource_id "nullable"
+    jsonb metadata
+    timestamptz created_at
+  }
   app_projects {
     uuid id PK "UUIDv7"
     text owner_id FK "auth.user.id"
@@ -69,7 +95,7 @@ erDiagram
 
 | Schema | Owner role | Managed by | Contents today |
 |---|---|---|---|
-| `app` | `app_migrator` | goose migrations in `backend/migrations/` | `projects`, `goose_db_version` (migration bookkeeping) |
+| `app` | `app_migrator` | goose migrations in `backend/migrations/` | `projects`, `endpoints`, `audit_log`, `goose_db_version` (migration bookkeeping) |
 | `auth` | `auth_migrator` | Better Auth 1.7.18 migrations (`auth/src/migrate.ts`) | `user`, `session`, `account`, `verification`, `rateLimit` |
 
 Nothing is created in `public`; `CREATE` on `public` is revoked.
@@ -108,6 +134,49 @@ none loads a project by id alone.
 
 The migration refuses to run if `auth."user"` does not exist: the auth
 migrations must run first.
+
+### `app.endpoints`
+
+Webhook receiving endpoints. Created by `backend/migrations/00003_endpoints.sql`.
+The receiving URL is `INGEST_BASE_URL + "/h/" + token`; the token itself is
+never stored.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key, UUIDv7 |
+| `project_id` | uuid, not null | FK → `app.projects(id)` **`ON DELETE CASCADE`** |
+| `name` | text, not null | `CHECK` 1–100 characters |
+| `token_hash` | bytea, not null | `HMAC-SHA256(ENDPOINT_TOKEN_HMAC_KEY, token)`, exactly 32 bytes, **unique**. Ingestion looks endpoints up by this hash |
+| `token_ciphertext` | bytea, not null | `AES-256-GCM(ENDPOINT_TOKEN_ENC_KEY, token)`: 12-byte nonce + ciphertext + tag. The project and endpoint ids are additional authenticated data, so a ciphertext cannot be moved to another row |
+| `token_key_version` | smallint, not null | Default 1; allows encryption-key rotation later |
+| `enabled` | boolean, not null | Default true. Disabled endpoints keep their token and events |
+| `last_received_at` | timestamptz, nullable | Set by ingestion |
+| `token_rotated_at` | timestamptz, nullable | Last token rotation |
+| `created_at`, `updated_at` | timestamptz, not null | Default `now()` |
+
+Indexes: `endpoints_token_hash_key` (unique `token_hash`), and
+`endpoints_project_created_idx (project_id, created_at DESC)` for the
+owner-scoped, newest-first list. At most `LIMIT_ENDPOINTS_PER_PROJECT`
+endpoints per project (default 25).
+
+### `app.audit_log`
+
+Who did what to which project resource. Shared by every module that audits
+actions; created by `00003_endpoints.sql`. It never contains tokens, URLs,
+secrets, or payloads.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key, UUIDv7 |
+| `project_id` | uuid, not null | FK → `app.projects(id)` **`ON DELETE CASCADE`** |
+| `actor_user_id` | text, nullable | FK → `auth."user"(id)` **`ON DELETE SET NULL`** |
+| `action` | text, not null | For example `endpoint.created`, `endpoint.rotated` (1–64 characters) |
+| `resource_type` | text, not null | For example `endpoint` |
+| `resource_id` | uuid, nullable | The affected resource |
+| `metadata` | jsonb, not null | A JSON object; for endpoints only the id and name |
+| `created_at` | timestamptz, not null | Default `now()` |
+
+Index: `audit_log_project_created_idx (project_id, created_at DESC, id DESC)`.
 
 ### `auth` tables (created by Better Auth)
 
@@ -150,6 +219,8 @@ deleting a project or its owner must leave no rows behind. There is no archive
 or restore.
 
 - **Projects**: kept until the owner deletes them (type-to-confirm in project settings) or deletes their account.
+- **Endpoints**: kept until the owner deletes the endpoint (type-to-confirm) or its project. Deleting an endpoint removes its events and replays by cascade; rotating its token keeps them.
+- **Audit log**: kept with its project and deleted with it. If the actor's account is deleted, `actor_user_id` becomes `NULL` (in practice the actor's projects, and so these rows, are deleted too).
 
 - **Accounts**: kept until the user deletes their account (Account settings → Delete account), which removes the `user` row and, by cascade, its sessions and credentials. Later changes cascade the user's projects and data too.
 - **Sessions**: deleted on sign-out, sign-out everywhere, password change (other sessions), password reset (all sessions), and account deletion. Expired rows are rejected immediately but remain in the table until Better Auth removes them.

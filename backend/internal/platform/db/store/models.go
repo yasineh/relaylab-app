@@ -8,6 +8,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// Who did what to which project resource; never contains secrets, tokens, or payloads
+type AppAuditLog struct {
+	ID           pgtype.UUID
+	ProjectID    pgtype.UUID
+	ActorUserID  pgtype.Text
+	Action       string
+	ResourceType string
+	ResourceID   pgtype.UUID
+	Metadata     []byte
+	CreatedAt    pgtype.Timestamptz
+}
+
+// Webhook receiving endpoints; tokens stored only as HMAC hash + AES-GCM ciphertext
+type AppEndpoint struct {
+	ID              pgtype.UUID
+	ProjectID       pgtype.UUID
+	Name            string
+	TokenHash       []byte
+	TokenCiphertext []byte
+	TokenKeyVersion int16
+	Enabled         bool
+	LastReceivedAt  pgtype.Timestamptz
+	TokenRotatedAt  pgtype.Timestamptz
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
 // User-owned projects; deleting one cascades to all project-scoped data
 type AppProject struct {
 	ID          pgtype.UUID

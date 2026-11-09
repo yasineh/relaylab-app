@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"relaylab/internal/endpoints"
 	"relaylab/internal/identity"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db/store"
@@ -101,8 +102,9 @@ func testRouterWith(t *testing.T, o routerOpts) http.Handler {
 		authProxy: identity.NewAuthProxy(identity.ProxyOptions{
 			Target: target, Secret: authCfg.ProxySharedSecret, Timeout: 5 * time.Second, ForwardedTo: "http",
 		}),
-		projects: projects.NewHandler(projects.NewService(nil, 20)), // not called by these tests
-		web:      o.web,
+		projects:  projects.NewHandler(projects.NewService(nil, 20)), // not called by these tests
+		endpoints: endpoints.NewHandler(endpoints.NewService(nil, nil, "", 25)),
+		web:       o.web,
 	})
 }
 

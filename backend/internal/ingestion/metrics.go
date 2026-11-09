@@ -30,6 +30,10 @@ type Metrics struct {
 	bodySize prometheus.Histogram
 }
 
+// durationBuckets are ingest_duration_seconds bucket bounds in seconds. They are
+// not limits; the top bound only happens to equal the body-timeout default.
+var durationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
+
 // NewMetrics registers the ingestion collectors on reg.
 func NewMetrics(reg prometheus.Registerer) *Metrics {
 	m := &Metrics{
@@ -40,7 +44,7 @@ func NewMetrics(reg prometheus.Registerer) *Metrics {
 		duration: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "ingest_duration_seconds",
 			Help:    "Time from receiving a webhook request to responding.",
-			Buckets: []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+			Buckets: durationBuckets,
 		}),
 		bodySize: prometheus.NewHistogram(prometheus.HistogramOpts{
 			Name:    "ingest_body_bytes",

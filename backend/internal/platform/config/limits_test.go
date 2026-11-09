@@ -103,6 +103,8 @@ func TestLimitSpecsAreUnique(t *testing.T) {
 var unrelatedConstants = map[string]map[string]bool{
 	// Endpoint display-name length (also a database CHECK), not a header count.
 	filepath.Join("internal", "endpoints", "service.go"): {"NameMaxChars": true},
+	// Histogram bucket bounds in seconds; the 10 s top bound is not a timeout.
+	filepath.Join("internal", "ingestion", "metrics.go"): {"durationBuckets": true},
 }
 
 // TestNoScatteredLimitLiterals fails if a known limit default is hard-coded in

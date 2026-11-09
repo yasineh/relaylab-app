@@ -165,9 +165,9 @@ const listEndpointEventsAsc = `-- name: ListEndpointEventsAsc :many
 SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
        e.content_type, e.body_size
 FROM app.webhook_events e
-JOIN app.projects p ON p.id = e.project_id
 JOIN app.endpoints en ON en.id = e.endpoint_id
-WHERE e.endpoint_id = $1 AND e.project_id = $2 AND p.owner_id = $3
+JOIN app.projects p ON p.id = en.project_id
+WHERE e.endpoint_id = $1 AND en.project_id = $2 AND p.owner_id = $3
   AND e.id > $4 AND e.id < $5
   AND (cardinality($6::text[]) = 0 OR e.method = ANY($6::text[]))
   AND ($7::timestamptz IS NULL OR e.received_at >= $7::timestamptz)
@@ -245,9 +245,9 @@ const listEndpointEventsDesc = `-- name: ListEndpointEventsDesc :many
 SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
        e.content_type, e.body_size
 FROM app.webhook_events e
-JOIN app.projects p ON p.id = e.project_id
 JOIN app.endpoints en ON en.id = e.endpoint_id
-WHERE e.endpoint_id = $1 AND e.project_id = $2 AND p.owner_id = $3
+JOIN app.projects p ON p.id = en.project_id
+WHERE e.endpoint_id = $1 AND en.project_id = $2 AND p.owner_id = $3
   AND e.id > $4 AND e.id < $5
   AND (cardinality($6::text[]) = 0 OR e.method = ANY($6::text[]))
   AND ($7::timestamptz IS NULL OR e.received_at >= $7::timestamptz)
@@ -448,9 +448,12 @@ type ListEventsDescRow struct {
 // generic plan still use (project_id, id) and (endpoint_id, id) as index
 // conditions. The NULL-or optional filters below only narrow rows inside that
 // range. received_after is inclusive and received_before exclusive.
-// The ASC and DESC variants differ only in ORDER BY, and the ByEndpoint
-// variants only in the endpoint condition, so the planner can pick the
-// endpoint index.
+// The ASC and DESC variants differ only in ORDER BY. The Endpoint variants
+// check the project through the endpoint (en.project_id) instead of
+// e.project_id: the endpoint determines the project (composite foreign key),
+// but the planner treats the two columns as independent, so filtering both
+// underestimates rows ~10x and can pick a read-everything-then-sort plan
+// (TestListQueriesUseIndexes).
 func (q *Queries) ListEventsDesc(ctx context.Context, arg ListEventsDescParams) ([]ListEventsDescRow, error) {
 	rows, err := q.db.Query(ctx, listEventsDesc,
 		arg.ProjectID,

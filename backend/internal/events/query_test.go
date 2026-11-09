@@ -23,7 +23,7 @@ type seedEnv struct {
 func newSeedEnv(t *testing.T) *seedEnv {
 	t.Helper()
 	fx := fixture.New(t, "alice", "bob")
-	return &seedEnv{Env: fx, q: store.New(fx.Pool), project: fx.Project(t, "alice", "Alpha")}
+	return &seedEnv{Env: fx, q: newQuerier(fx.Pool), project: fx.Project(t, "alice", "Alpha")}
 }
 
 func (e *seedEnv) endpoint(t *testing.T, project uuid.UUID, name string) uuid.UUID {

@@ -48,9 +48,12 @@ type Querier interface {
 	// generic plan still use (project_id, id) and (endpoint_id, id) as index
 	// conditions. The NULL-or optional filters below only narrow rows inside that
 	// range. received_after is inclusive and received_before exclusive.
-	// The ASC and DESC variants differ only in ORDER BY, and the ByEndpoint
-	// variants only in the endpoint condition, so the planner can pick the
-	// endpoint index.
+	// The ASC and DESC variants differ only in ORDER BY. The Endpoint variants
+	// check the project through the endpoint (en.project_id) instead of
+	// e.project_id: the endpoint determines the project (composite foreign key),
+	// but the planner treats the two columns as independent, so filtering both
+	// underestimates rows ~10x and can pick a read-everything-then-sort plan
+	// (TestListQueriesUseIndexes).
 	ListEventsDesc(ctx context.Context, arg ListEventsDescParams) ([]ListEventsDescRow, error)
 	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
 	// Endpoint queries. Every dashboard query is scoped to the owner by joining

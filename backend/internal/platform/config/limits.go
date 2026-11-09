@@ -37,6 +37,11 @@ type Limits struct {
 	// applied before the endpoint lookup so unknown-token floods are bounded too.
 	IngestRatePerIPPerMinute int
 	IngestRateIPBurst        int
+	// PageDefault and PageMax set list page sizes: PageDefault when a request
+	// sends no limit, and requests above PageMax get 422 validation_failed.
+	// PageDefault must not exceed PageMax.
+	PageDefault int
+	PageMax     int
 }
 
 type limitSpec struct {
@@ -122,6 +127,18 @@ var limitSpecs = []limitSpec{
 		doc:  "Burst of ingestion requests one client IP may send at once, per instance",
 		bind: func(l *Limits) *int { return &l.IngestRateIPBurst },
 	},
+	{
+		env:  "LIMIT_PAGE_DEFAULT",
+		def:  50,
+		doc:  "Items per page when a list request sends no limit",
+		bind: func(l *Limits) *int { return &l.PageDefault },
+	},
+	{
+		env:  "LIMIT_PAGE_MAX",
+		def:  100,
+		doc:  "Largest page size a list request may ask for",
+		bind: func(l *Limits) *int { return &l.PageMax },
+	},
 }
 
 // DefaultLimits returns the documented defaults.
@@ -153,6 +170,9 @@ func LoadLimits(getenv Getenv) (Limits, error) {
 			continue
 		}
 		*s.bind(&l) = n
+	}
+	if len(errs) == 0 && l.PageDefault > l.PageMax {
+		errs = append(errs, &FieldError{Var: "LIMIT_PAGE_DEFAULT", Reason: "must not exceed LIMIT_PAGE_MAX"})
 	}
 	if len(errs) > 0 {
 		return Limits{}, errors.Join(errs...)

@@ -170,3 +170,23 @@ func endpointParams(c store.ListEventsDescParams, endpoint uuid.UUID) store.List
 		ContentTypePattern: c.ContentTypePattern, RowLimit: c.RowLimit,
 	}
 }
+
+// listPage returns up to limit events after the cursor and, when more exist,
+// the cursor for the next page. It fetches one extra row to know.
+func listPage(ctx context.Context, q store.Querier, owner string, project uuid.UUID, f Filter, rawCursor string, limit int) ([]Summary, *string, error) {
+	pos, err := decodeCursor(rawCursor, f)
+	if err != nil {
+		return nil, nil, err
+	}
+	after, before := idWindow(f, pos)
+	rows, err := listRows(ctx, q, owner, project, f, after, before, int32(limit+1)) //nolint:gosec // limit <= LIMIT_PAGE_MAX
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(rows) <= limit {
+		return rows, nil, nil
+	}
+	rows = rows[:limit]
+	next := encodeCursor(f, rows[limit-1].ID)
+	return rows, &next, nil
+}

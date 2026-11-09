@@ -25,6 +25,17 @@ func TestLimitDefaults(t *testing.T) {
 		l.IngestRatePerIPPerMinute != 120 || l.IngestRateIPBurst != 60 {
 		t.Fatalf("ingest defaults = %+v", l)
 	}
+	if l.PageDefault != 50 || l.PageMax != 100 {
+		t.Fatalf("page defaults = %+v", l)
+	}
+}
+
+func TestPageDefaultMustNotExceedMax(t *testing.T) {
+	_, err := LoadLimits(envFrom(map[string]string{"LIMIT_PAGE_DEFAULT": "80", "LIMIT_PAGE_MAX": "40"}))
+	assertFieldError(t, err, "LIMIT_PAGE_DEFAULT")
+	if _, err := LoadLimits(envFrom(map[string]string{"LIMIT_PAGE_DEFAULT": "40", "LIMIT_PAGE_MAX": "40"})); err != nil {
+		t.Fatalf("equal default and max: %v", err)
+	}
 }
 
 func TestIngestBodyLimitHardCap(t *testing.T) {

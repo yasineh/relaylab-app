@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * Loads the project for /projects/:projectId/* and renders its sub-navigation.
- * Only sections that exist are listed: Endpoints, Events, and Replays are
- * added by the changes that ship them.
+ * Only sections that exist are listed: Events and Replays are added by the
+ * changes that ship them.
  */
 export function ProjectLayout() {
   const { projectId = '' } = useParams()
@@ -57,6 +57,9 @@ export function ProjectLayout() {
       <nav aria-label="Project" className="flex gap-5 border-b">
         <NavLink end to={`/projects/${p.id}`} className={tab}>
           Overview
+        </NavLink>
+        <NavLink to={`/projects/${p.id}/endpoints`} className={tab}>
+          Endpoints
         </NavLink>
         <NavLink to={`/projects/${p.id}/settings`} className={tab}>
           Settings

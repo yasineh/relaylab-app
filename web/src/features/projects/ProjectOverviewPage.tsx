@@ -1,4 +1,7 @@
 import { Inbox, Webhook } from 'lucide-react'
+import { Link } from 'react-router'
+
+import { buttonVariants } from '@/components/ui/button'
 
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { formatDateTime } from '@/lib/format'
@@ -25,14 +28,20 @@ export function ProjectOverviewPage() {
       </section>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <section aria-labelledby="endpoints-heading" className="rounded-lg border border-dashed bg-card p-6">
+        <section aria-labelledby="endpoints-heading" className="rounded-lg border bg-card p-6">
           <Webhook aria-hidden="true" className="mb-2 size-5 text-primary" />
           <h2 id="endpoints-heading" className="font-medium">
             Endpoints
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Creating webhook endpoints is not available in this version of RelayLab yet.
+            Create an endpoint to get a unique URL for receiving webhooks.
           </p>
+          <Link
+            to={`/projects/${project.id}/endpoints`}
+            className={buttonVariants({ variant: 'outline', size: 'sm', className: 'mt-3' })}
+          >
+            Manage endpoints
+          </Link>
         </section>
         <section aria-labelledby="events-heading" className="rounded-lg border border-dashed bg-card p-6">
           <Inbox aria-hidden="true" className="mb-2 size-5 text-primary" />
@@ -40,7 +49,7 @@ export function ProjectOverviewPage() {
             Recent events
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Received webhooks will appear here once endpoints are available.
+            Viewing received webhooks is not available in this version of RelayLab yet.
           </p>
         </section>
       </div>

@@ -131,6 +131,13 @@ function ReceivingUrl({ endpoint: e }: { endpoint: Endpoint }) {
           This endpoint is disabled, so requests to this URL are rejected until you enable it.
         </p>
       ) : null}
+      {/* Remove when add-webhook-ingestion ships the /h/{token} route. */}
+      <Alert tone="info">
+        <p>
+          Receiving requests is not available in this version of RelayLab yet. The URL is reserved for this
+          endpoint and will start accepting requests once receiving ships.
+        </p>
+      </Alert>
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-sm font-medium">Send a test request</h4>

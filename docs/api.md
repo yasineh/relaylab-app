@@ -1,7 +1,7 @@
 # API reference
 
-The HTTP API that exists **today**. Later changes add endpoints, events, and
-replay; each one documents its routes here when it ships.
+The HTTP API that exists **today**. Later changes add webhook ingestion,
+events, and replay; each one documents its routes here when it ships.
 
 Everything is served from the application origin (`APP_ORIGIN`): the web app,
 the dashboard API under `/api/v1`, and authentication under `/api/auth`. The
@@ -14,7 +14,7 @@ from clients that are not browsers.
 - **Authentication**: the session cookie set by `/api/auth`. See [Authentication and sessions](security/authentication.md).
 - **CSRF**: `POST`, `PUT`, `PATCH`, and `DELETE` on `/api/v1` require `Origin: <APP_ORIGIN>`. When the browser sends no `Origin`, `Sec-Fetch-Site: same-origin` is required instead.
 - **Request IDs**: every response has `X-Request-ID`. A safe inbound value (1–64 characters of `[A-Za-z0-9._-]`) is reused.
-- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20).
+- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20); `LIMIT_ENDPOINTS_PER_PROJECT` endpoints per project (25).
 
 ### Error envelope
 
@@ -36,6 +36,7 @@ SQL, file paths, or configuration values.
 | 405 | `method_not_allowed` | Known path, wrong method |
 | 413 | `body_too_large` | Body over the limit |
 | 409 | `project_limit_reached` | Creating a project beyond `LIMIT_PROJECTS_PER_USER` |
+| 409 | `endpoint_limit_reached` | Creating an endpoint beyond `LIMIT_ENDPOINTS_PER_PROJECT` |
 | 415 | `unsupported_media_type` | Body is not `application/json` |
 | 422 | `validation_failed` | A field is invalid; `error.fields` maps each field to a message |
 | 431 | `headers_too_large` | Headers over the limit |
@@ -119,6 +120,69 @@ Example validation error:
 to it (endpoints, events, replays, jobs as they are added) in one statement,
 through database cascades. Deleting the account deletes all of the user's
 projects the same way. There is no archive or restore.
+
+### Endpoints
+
+An endpoint is a secret receiving URL inside a project. Endpoint routes are
+nested under a project the caller owns. Another user's project, an endpoint of
+a different project, a missing endpoint, and a malformed id all return the same
+`404 not_found`.
+
+> Receiving webhooks at the endpoint URL (`/h/{token}`) is not available yet.
+> It ships with the webhook ingestion change and will be documented here then.
+
+An endpoint looks like this:
+
+```json
+{
+  "id": "01936f3e-8c9d-7e1f-a2b3-c4d5e6f70819",
+  "project_id": "01936f3e-7b8a-7c1d-9e2f-0a1b2c3d4e5f",
+  "name": "Stripe staging",
+  "enabled": true,
+  "url": "http://localhost:5173/h/4kQ9…(43+ characters)",
+  "last_received_at": null,
+  "created_at": "2026-11-09T10:00:00Z",
+  "updated_at": "2026-11-09T10:00:00Z"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `id` | UUIDv7, assigned by the server |
+| `name` | Required. 1–100 characters after trimming whitespace; no control characters. Not unique |
+| `enabled` | `true` on creation. A disabled endpoint keeps its URL and events |
+| `url` | `INGEST_BASE_URL` + `/h/` + a token of at least 43 base62 characters (256 random bits). Treat it as a secret. `null` only if the stored token cannot be decrypted (for example, a lost `ENDPOINT_TOKEN_ENC_KEY`); rotating issues a new URL |
+| `last_received_at` | Time of the most recent received request, or `null` |
+
+The plaintext token is never stored: the database holds an HMAC lookup hash and
+an AES-GCM encrypted copy, so the owner can see the URL again later. Endpoint
+responses are `Cache-Control: no-store`.
+
+| Method and path | Body | Success | Errors |
+|---|---|---|---|
+| `GET /api/v1/projects/{projectId}/endpoints` | — | `200 {"items":[endpoint, ...]}`, newest first. Bounded by the endpoint limit, so not paginated | `404` |
+| `POST /api/v1/projects/{projectId}/endpoints` | `{"name": "..."}` | `201` endpoint, with `Location: /api/v1/projects/<projectId>/endpoints/<id>` | `404`, `422`, `409 endpoint_limit_reached`, `400` |
+| `GET /api/v1/projects/{projectId}/endpoints/{endpointId}` | — | `200` endpoint | `404` |
+| `PATCH /api/v1/projects/{projectId}/endpoints/{endpointId}` | `{"name": "..."}` and/or `{"enabled": true \| false}` | `200` endpoint. The URL does not change | `404`, `422` (also for an empty body or wrong types), `400` (unknown fields) |
+| `POST /api/v1/projects/{projectId}/endpoints/{endpointId}/rotate` | — | `200` endpoint with a new `url`. The old URL stops working immediately; received events stay with the endpoint | `404` |
+| `DELETE /api/v1/projects/{projectId}/endpoints/{endpointId}` | — | `204`, no body. Removes the endpoint and everything received through it | `404` |
+
+Example:
+
+```sh
+curl -X POST "$APP_ORIGIN/api/v1/projects/$PROJECT_ID/endpoints" \
+  -H "Origin: $APP_ORIGIN" -H 'Content-Type: application/json' \
+  -b "$SESSION_COOKIE" -d '{"name":"Stripe staging"}'
+```
+
+**Limit.** A project may have at most `LIMIT_ENDPOINTS_PER_PROJECT` endpoints
+(default 25). The check is serialised per project, so concurrent creates cannot
+exceed it.
+
+**Audit.** Create, rename, enable, disable, rotate, and delete each write an
+`audit_log` entry with the actor, project, and endpoint id and name. Entries
+never contain the token or URL. Request logs record the route pattern
+(`/h/{token}`, or `unmatched`), never the raw path, so tokens do not reach logs.
 
 ## Authentication (`/api/auth/*`)
 

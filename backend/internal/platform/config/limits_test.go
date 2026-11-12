@@ -118,6 +118,12 @@ var unrelatedConstants = map[string]map[string]bool{
 	filepath.Join("internal", "ingestion", "metrics.go"): {"durationBuckets": true},
 	// Content type filter length, not a page size.
 	filepath.Join("internal", "events", "service.go"): {"contentTypeFilterMaxChars": true},
+	// Outbound (replay) response cap; the same value as the API body limit by coincidence.
+	filepath.Join("internal", "platform", "config", "outbound.go"): {
+		"defaultOutboundMaxResponseBytes": true, "maxOutboundResponseBytes": true,
+	},
+	// Outbound response header cap from the outbound-request-guard spec, not the inbound header limit.
+	filepath.Join("internal", "replay", "outbound", "client.go"): {"MaxResponseHeaderBytes": true},
 	// Test-helper retry count for shared-catalog DDL, not a stream limit.
 	filepath.Join("internal", "platform", "db", "dbtest", "dbtest.go"): {"concurrentUpdateAttempts": true},
 }

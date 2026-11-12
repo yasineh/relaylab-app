@@ -37,7 +37,7 @@ type Options struct {
 	ResponseHeaderTimeout  time.Duration
 	TotalTimeout           time.Duration // the whole request, including the body read
 	MaxResponseBytes       int           // response body cap (decompressed)
-	MaxResponseHeaderBytes int
+	MaxResponseHeaderBytes int           // default and spec value: MaxResponseHeaderBytes
 	MaxConcurrency         int
 
 	// UserAgent is sent on every request, e.g. "RelayLab-Replay/1.0".
@@ -94,6 +94,10 @@ type Client struct {
 // acquireTimeout is how long a request waits for a concurrency slot (spec).
 const acquireTimeout = 2 * time.Second
 
+// MaxResponseHeaderBytes caps response headers (spec: 32 KiB); larger
+// headers fail with response_too_large.
+const MaxResponseHeaderBytes = 32 << 10
+
 // New builds a client and runs the activation self-check. A client whose
 // self-check fails is inactive: Active reports false and Do sends nothing.
 func New(o Options) *Client {
@@ -113,6 +117,9 @@ func New(o Options) *Client {
 	if o.acquireTimeout <= 0 {
 		c.o.acquireTimeout = acquireTimeout
 	}
+	if o.MaxResponseHeaderBytes <= 0 {
+		c.o.MaxResponseHeaderBytes = MaxResponseHeaderBytes
+	}
 	c.sem = make(chan struct{}, max(o.MaxConcurrency, 1))
 	c.dialer = &net.Dialer{Timeout: o.ConnectTimeout, Control: c.control}
 	transport := &http.Transport{
@@ -121,7 +128,7 @@ func New(o Options) *Client {
 		TLSClientConfig:        &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: o.rootCAs},
 		TLSHandshakeTimeout:    o.TLSHandshakeTimeout,
 		ResponseHeaderTimeout:  o.ResponseHeaderTimeout,
-		MaxResponseHeaderBytes: int64(o.MaxResponseHeaderBytes),
+		MaxResponseHeaderBytes: int64(c.o.MaxResponseHeaderBytes),
 		DisableKeepAlives:      true, // every request dials, so every request is validated
 		ForceAttemptHTTP2:      true,
 	}

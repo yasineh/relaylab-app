@@ -117,3 +117,23 @@ func TestPostgresChecks(t *testing.T) {
 		t.Fatalf("after migrate: %d %s", code, raw)
 	}
 }
+
+func TestReadinessReportsFlags(t *testing.T) {
+	c := health.New(ok, ok)
+	state := "active"
+	c.AddFlag("outbound_guard", func() string { return state })
+	code, body, raw := get(t, c, "/readyz")
+	if code != 200 || body["status"] != "ready" || body["outbound_guard"] != "active" {
+		t.Fatalf("got %d %s", code, raw)
+	}
+	state = "inactive" // a flag reports state; it does not change readiness
+	if code, body, raw = get(t, c, "/readyz"); code != 200 || body["outbound_guard"] != "inactive" {
+		t.Fatalf("got %d %s", code, raw)
+	}
+	down := func(context.Context) error { return errors.New("down") }
+	d := health.New(down, ok)
+	d.AddFlag("outbound_guard", func() string { return "active" })
+	if code, body, raw = get(t, d, "/readyz"); code != 503 || body["outbound_guard"] != "active" {
+		t.Fatalf("got %d %s", code, raw)
+	}
+}

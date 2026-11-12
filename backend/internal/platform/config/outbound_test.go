@@ -3,6 +3,7 @@ package config
 import (
 	"slices"
 	"testing"
+	"time"
 )
 
 func loadOutbound(t *testing.T, env map[string]string) (*Outbound, error) {
@@ -74,5 +75,31 @@ func TestOutboundHTTPRefusedInProduction(t *testing.T) {
 	dev, err := loadOutbound(t, map[string]string{"OUTBOUND_ALLOW_HTTP": "true"})
 	if err != nil || !dev.AllowHTTP || !slices.Contains(dev.AllowedPorts, 80) {
 		t.Fatalf("development with the flag: %+v %v", dev, err)
+	}
+}
+
+func TestOutboundLimitsDefaultsAndBounds(t *testing.T) {
+	o, err := loadOutbound(t, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.ConnectTimeout != 3*time.Second || o.TLSHandshakeTimeout != 3*time.Second ||
+		o.ResponseHeaderTimeout != 5*time.Second || o.TotalTimeout != 10*time.Second ||
+		o.MaxResponseBytes != 64<<10 || o.MaxConcurrency != 8 {
+		t.Fatalf("defaults %+v", o)
+	}
+	for k, v := range map[string]string{
+		"OUTBOUND_MAX_RESPONSE_BYTES": "262145", // above the hard cap
+		"OUTBOUND_MAX_CONCURRENCY":    "0",
+		"OUTBOUND_CONNECT_TIMEOUT":    "0s",
+		"OUTBOUND_HEADER_TIMEOUT":     "2m",
+		"OUTBOUND_TOTAL_TIMEOUT":      "1s", // shorter than the header timeout
+	} {
+		_, err := loadOutbound(t, map[string]string{k: v})
+		assertFieldError(t, err, k)
+	}
+	o, err = loadOutbound(t, map[string]string{"OUTBOUND_MAX_RESPONSE_BYTES": "262144", "OUTBOUND_TOTAL_TIMEOUT": "20s"})
+	if err != nil || o.MaxResponseBytes != 256<<10 || o.TotalTimeout != 20*time.Second {
+		t.Fatalf("%+v %v", o, err)
 	}
 }

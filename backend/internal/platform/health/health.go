@@ -23,6 +23,20 @@ type Checker struct {
 	database     Check
 	migrations   Check
 	shuttingDown atomic.Bool
+	flags        []flag
+}
+
+// flag is an extra status reported in every readiness response, such as the
+// worker's outbound_guard. It does not affect readiness itself.
+type flag struct {
+	name  string
+	value func() string
+}
+
+// AddFlag reports name with value() in every readiness response. Call it
+// before serving.
+func (c *Checker) AddFlag(name string, value func() string) {
+	c.flags = append(c.flags, flag{name: name, value: value})
 }
 
 // New returns a Checker for the given dependency checks.
@@ -32,11 +46,6 @@ func New(database, migrations Check) *Checker {
 
 // MarkShuttingDown makes readiness return 503 from now on.
 func (c *Checker) MarkShuttingDown() { c.shuttingDown.Store(true) }
-
-type readyBody struct {
-	Status string            `json:"status"`
-	Checks map[string]string `json:"checks,omitempty"`
-}
 
 // Liveness reports that the process can serve HTTP. It touches no dependency.
 func (c *Checker) Liveness(w http.ResponseWriter, _ *http.Request) {
@@ -58,11 +67,16 @@ func (c *Checker) Readiness(w http.ResponseWriter, r *http.Request) {
 	if c.shuttingDown.Load() {
 		ready = false
 	}
+	body := map[string]any{"status": "ready"}
+	status := http.StatusOK
 	if !ready {
-		httpx.WriteJSON(w, http.StatusServiceUnavailable, readyBody{Status: "not_ready", Checks: checks})
-		return
+		body = map[string]any{"status": "not_ready", "checks": checks}
+		status = http.StatusServiceUnavailable
 	}
-	httpx.WriteJSON(w, http.StatusOK, readyBody{Status: "ready"})
+	for _, f := range c.flags {
+		body[f.name] = f.value()
+	}
+	httpx.WriteJSON(w, status, body)
 }
 
 // Register mounts the endpoints on mux-like routers.

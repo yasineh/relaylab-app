@@ -5,12 +5,36 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
-// Outbound is the worker's policy for user-directed outbound requests
-// (replay). Numeric limits (timeouts, response cap, concurrency) are in
-// Limits as LIMIT_OUTBOUND_*.
+// Outbound defaults (outbound-request-guard spec).
+const (
+	defaultOutboundMaxResponseBytes = 64 << 10
+	maxOutboundResponseBytes        = 256 << 10 // hard cap
+	defaultOutboundMaxConcurrency   = 8
+)
+
+// Outbound is the worker's policy and limits for user-directed outbound
+// requests (replay). The keys are the OUTBOUND_* names the spec defines.
 type Outbound struct {
+	// ConnectTimeout bounds the TCP connect and each DNS lookup
+	// (OUTBOUND_CONNECT_TIMEOUT, default 3s).
+	ConnectTimeout time.Duration
+	// TLSHandshakeTimeout (OUTBOUND_TLS_TIMEOUT, default 3s).
+	TLSHandshakeTimeout time.Duration
+	// ResponseHeaderTimeout (OUTBOUND_HEADER_TIMEOUT, default 5s).
+	ResponseHeaderTimeout time.Duration
+	// TotalTimeout covers the whole request including the body read
+	// (OUTBOUND_TOTAL_TIMEOUT, default 10s).
+	TotalTimeout time.Duration
+	// MaxResponseBytes is the response body kept (OUTBOUND_MAX_RESPONSE_BYTES,
+	// default 65536, at most 262144); longer bodies are truncated.
+	MaxResponseBytes int
+	// MaxConcurrency is the in-flight requests per worker process
+	// (OUTBOUND_MAX_CONCURRENCY, default 8).
+	MaxConcurrency int
+
 	// AllowHTTP permits http:// destinations (and port 80). Local
 	// development only: refused when APP_ENV=production.
 	AllowHTTP bool
@@ -37,6 +61,34 @@ func LoadOutbound(getenv Getenv, cfg *Config) (*Outbound, error) {
 		o.AllowHTTP = true
 	default:
 		return nil, &FieldError{Var: "OUTBOUND_ALLOW_HTTP", Reason: "must be true or false"}
+	}
+
+	durations := []struct {
+		env string
+		def string
+		dst *time.Duration
+	}{
+		{"OUTBOUND_CONNECT_TIMEOUT", "3s", &o.ConnectTimeout},
+		{"OUTBOUND_TLS_TIMEOUT", "3s", &o.TLSHandshakeTimeout},
+		{"OUTBOUND_HEADER_TIMEOUT", "5s", &o.ResponseHeaderTimeout},
+		{"OUTBOUND_TOTAL_TIMEOUT", "10s", &o.TotalTimeout},
+	}
+	for _, d := range durations {
+		v, err := time.ParseDuration(withDefault(getenv(d.env), d.def))
+		if err != nil || v <= 0 || v > time.Minute {
+			return nil, &FieldError{Var: d.env, Reason: "must be a positive duration of at most 1m, such as 3s"}
+		}
+		*d.dst = v
+	}
+	if o.TotalTimeout < o.ConnectTimeout || o.TotalTimeout < o.ResponseHeaderTimeout {
+		return nil, &FieldError{Var: "OUTBOUND_TOTAL_TIMEOUT", Reason: "must not be shorter than the connect or header timeout"}
+	}
+	var err error
+	if o.MaxResponseBytes, err = positiveInt(getenv, "OUTBOUND_MAX_RESPONSE_BYTES", defaultOutboundMaxResponseBytes, maxOutboundResponseBytes); err != nil {
+		return nil, err
+	}
+	if o.MaxConcurrency, err = positiveInt(getenv, "OUTBOUND_MAX_CONCURRENCY", defaultOutboundMaxConcurrency, 0); err != nil {
+		return nil, err
 	}
 
 	ports := splitList(withDefault(getenv("OUTBOUND_ALLOWED_PORTS"), "443,8443"))
@@ -105,4 +157,21 @@ func dsnHosts(dsn string) []string {
 		}
 	}
 	return out
+}
+
+// positiveInt reads a positive integer with a default and an optional upper
+// bound (0 means none).
+func positiveInt(getenv Getenv, env string, def, upper int) (int, error) {
+	raw := strings.TrimSpace(getenv(env))
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, &FieldError{Var: env, Reason: "must be a positive integer"}
+	}
+	if upper > 0 && n > upper {
+		return 0, &FieldError{Var: env, Reason: "must be at most " + strconv.Itoa(upper)}
+	}
+	return n, nil
 }

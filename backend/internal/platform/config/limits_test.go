@@ -118,10 +118,6 @@ var unrelatedConstants = map[string]map[string]bool{
 	filepath.Join("internal", "ingestion", "metrics.go"): {"durationBuckets": true},
 	// Content type filter length, not a page size.
 	filepath.Join("internal", "events", "service.go"): {"contentTypeFilterMaxChars": true},
-	// Outbound (replay) response cap; the same value as the API body limit by coincidence.
-	filepath.Join("internal", "platform", "config", "outbound.go"): {
-		"defaultOutboundMaxResponseBytes": true, "maxOutboundResponseBytes": true,
-	},
 	// Outbound response header cap from the outbound-request-guard spec, not the inbound header limit.
 	filepath.Join("internal", "replay", "outbound", "client.go"): {"MaxResponseHeaderBytes": true},
 	// Test-helper retry count for shared-catalog DDL, not a stream limit.
@@ -129,7 +125,7 @@ var unrelatedConstants = map[string]map[string]bool{
 }
 
 // TestNoScatteredLimitLiterals fails if a known limit default is hard-coded in
-// Go code outside limits.go, so limits stay in one place (D17). Duration
+// Go code outside the config package, so limits stay in one place (D17). Duration
 // expressions such as 30*time.Second are not limits and are skipped, as are
 // the named constants in unrelatedConstants.
 func TestNoScatteredLimitLiterals(t *testing.T) {
@@ -144,8 +140,9 @@ func TestNoScatteredLimitLiterals(t *testing.T) {
 			if err != nil {
 				return err
 			}
+			// The config package is the one place limits are defined (D17).
 			if de.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") ||
-				filepath.Base(path) == "limits.go" {
+				filepath.Dir(path) == filepath.Join(root, "internal", "platform", "config") {
 				return nil
 			}
 			f, err := parser.ParseFile(fset, path, nil, 0)

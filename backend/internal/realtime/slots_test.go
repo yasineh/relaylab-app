@@ -7,8 +7,10 @@ import (
 
 func TestSlotsPerUser(t *testing.T) {
 	s := NewSlots(2)
-	if !s.Acquire("a") || !s.Acquire("a") {
-		t.Fatal("first two refused")
+	for i := range 2 {
+		if !s.Acquire("a") {
+			t.Fatalf("slot %d refused", i+1)
+		}
 	}
 	if s.Acquire("a") {
 		t.Fatal("third allowed")

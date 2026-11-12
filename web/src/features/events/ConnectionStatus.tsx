@@ -31,8 +31,7 @@ const text: Record<StreamState, { label: string; hint: string; dot: string }> = 
 export function ConnectionStatus({ state, className }: { state: StreamState; className?: string }) {
   const t = text[state]
   return (
-    <p
-      role="status"
+    <output
       aria-live="polite"
       title={t.hint}
       className={cn('inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground', className)}
@@ -40,6 +39,6 @@ export function ConnectionStatus({ state, className }: { state: StreamState; cla
       <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', t.dot)} />
       <span>{t.label}</span>
       <span className="sr-only">{t.hint}</span>
-    </p>
+    </output>
   )
 }

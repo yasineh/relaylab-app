@@ -8,7 +8,8 @@ import { axeViolations } from '@/test/axe'
 import { FakeEventSource } from '@/test/event-source'
 import { renderApp } from '@/test/render'
 
-const status = (label: string) => screen.getByText(label).closest('[role="status"]')
+// <output> has the implicit role "status".
+const status = (label: string) => screen.getByText(label).closest('output')
 
 describe('connection indicator (3.3)', () => {
   it.each([
@@ -19,6 +20,7 @@ describe('connection indicator (3.3)', () => {
   ] satisfies [StreamState, string][])('%s shows "%s" as text, not colour alone', async (state, label) => {
     const { container } = render(<ConnectionStatus state={state} />)
     const el = status(label)
+    expect(screen.getByRole('status')).toBe(el)
     expect(el).toHaveAttribute('aria-live', 'polite')
     // The coloured dot is decorative; the label and an explanation are text.
     expect(el?.querySelector('[aria-hidden="true"]')).toHaveClass('rounded-full')

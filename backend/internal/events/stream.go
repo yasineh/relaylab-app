@@ -181,6 +181,42 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 
 	heartbeat := time.NewTicker(o.Heartbeat)
 	defer heartbeat.Stop()
+	revalidate := time.NewTicker(o.RevalidateEvery)
+	defer revalidate.Stop()
+	session, _ := identity.FromContext(ctx)
+	expiry := time.NewTimer(time.Until(session.ExpiresAt))
+	defer expiry.Stop()
+
+	// recheck re-runs the REST API's session validator and the ownership
+	// check. It reports false after telling the client why the stream ends.
+	recheck := func() bool {
+		v, err := o.Validator.Validate(ctx, r)
+		switch {
+		case errors.Is(err, identity.ErrUnauthenticated), errors.Is(err, identity.ErrSessionExpired):
+			_ = out.send(sseSessionExpired, "", reasonJSON{Reason: "session_ended"})
+			return false
+		case err != nil:
+			if ctx.Err() == nil {
+				log.Warn("event stream session check failed", slog.String("error", err.Error()))
+			}
+			return false // the client reconnects and gets a definite answer
+		case v.UserID != owner:
+			_ = out.send(sseSessionExpired, "", reasonJSON{Reason: "session_ended"})
+			return false
+		}
+		if err := h.svc.CheckProject(ctx, owner, projectID); errors.Is(err, ErrNotFound) {
+			_ = out.send(sseResyncRequired, "", reasonJSON{Reason: resyncProjectGone})
+			return false
+		} else if err != nil {
+			if ctx.Err() == nil {
+				log.Warn("event stream project check failed", slog.String("error", err.Error()))
+			}
+			return false
+		}
+		// Better Auth may have extended the session (updateAge).
+		expiry.Reset(time.Until(v.ExpiresAt))
+		return true
+	}
 
 	for {
 		select {
@@ -205,6 +241,15 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 			}
 		case <-heartbeat.C:
 			if err := out.write([]byte(": ping\n\n")); err != nil {
+				return
+			}
+		case <-revalidate.C:
+			if !recheck() {
+				return
+			}
+		case <-expiry.C:
+			// Re-validate rather than trust the expiry seen at connect.
+			if !recheck() {
 				return
 			}
 		}

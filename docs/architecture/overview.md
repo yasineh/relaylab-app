@@ -12,7 +12,7 @@ flowchart LR
     vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
     subgraph image["relaylab image (distroless, nonroot)"]
       api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/api/v1/projects/{id}/events/stream (SSE, session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build<br/>realtime broker: one LISTEN connection per instance"]
-      worker["worker<br/>/healthz, /readyz on :8081<br/>(no jobs yet)"]
+      worker["worker<br/>/healthz, /readyz (outbound_guard), /metrics on :8081<br/>outbound guard for replay (no jobs yet)"]
       migrate["api migrate<br/>(one-shot, goose)"]
     end
     subgraph authimg["relaylab-auth image (Node 24)"]
@@ -84,8 +84,12 @@ fall back to the web app when it is embedded.
   carry ids only. Each stream loads summaries with an owner-scoped query, and
   summaries never include bodies, headers, or query values. Details:
   [API reference](../api.md#get-apiv1projectsprojectideventsstream).
-- **Not yet present**: outbound replay. Its boundary is added to this diagram
-  by the change that implements it.
+- **Outbound requests**: the worker holds the only client allowed to send
+  user-directed requests (`internal/replay/outbound`). HTTPS only, public
+  addresses only (checked on every DNS answer and on the socket itself), no
+  redirects, internal and RelayLab hosts blocked, and bounded time, size, and
+  concurrency. Nothing uses it yet; replay jobs arrive with `add-event-replay`.
+  Details: [Outbound requests](../security/outbound-replay.md).
 
 In production (prepared by `add-production-readiness`), the auth service runs
 as a sidecar in the same Cloud Run service as the API, so `AUTH_SERVICE_URL`

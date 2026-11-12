@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/redact"
 	"relaylab/internal/realtime"
 	"relaylab/internal/testutil/isolation"
@@ -32,7 +33,10 @@ func newAPI(t *testing.T) *api {
 		// The stream route is mounted for isolation checks; its broker never
 		// runs here (stream_test.go covers delivery).
 		v1.Route("/projects/{projectId}/events", NewHandler(svc, 50, 100).
-			WithStream(StreamOptions{Broker: realtime.NewBroker(realtime.Options{}), Validator: e.Validator()}).Routes)
+			WithStream(StreamOptions{
+				Broker: realtime.NewBroker(realtime.Options{}), Validator: e.Validator(),
+				Slots: realtime.NewSlots(config.DefaultLimits().StreamsPerUser),
+			}).Routes)
 	})
 	return &api{seedEnv: e, h: h, alice: e.As(t, h, "alice"), bob: e.As(t, h, "bob"), ep: e.endpoint(t, e.project, "Stripe")}
 }

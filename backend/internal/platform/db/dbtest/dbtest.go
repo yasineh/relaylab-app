@@ -194,12 +194,15 @@ func WithRoleLock(ctx context.Context, fn func() error) error {
 	return fn()
 }
 
+// concurrentUpdateAttempts bounds retryConcurrentUpdate.
+const concurrentUpdateAttempts = 5
+
 // retryConcurrentUpdate retries fn when PostgreSQL reports "tuple concurrently
 // updated" (XX000), which shared-catalog DDL can still hit when another
 // cluster client (outside these helpers) changes the same role at once.
 func retryConcurrentUpdate(fn func() error) error {
 	var err error
-	for attempt := range 5 {
+	for attempt := range concurrentUpdateAttempts {
 		if err = fn(); err == nil || !strings.Contains(err.Error(), "tuple concurrently updated") {
 			return err
 		}

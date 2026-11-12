@@ -169,6 +169,7 @@ func runServer() int {
 		events: events.NewHandler(events.NewService(pool, redactor), cfg.Limits.PageDefault, cfg.Limits.PageMax).
 			WithStream(events.StreamOptions{
 				Broker:          broker,
+				Slots:           realtime.NewSlots(cfg.Limits.StreamsPerUser),
 				Validator:       validator,
 				RevalidateEvery: cfg.StreamRevalidate,
 				Shutdown:        streamsDone,

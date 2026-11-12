@@ -42,6 +42,9 @@ type Limits struct {
 	// PageDefault must not exceed PageMax.
 	PageDefault int
 	PageMax     int
+	// StreamsPerUser caps concurrent live event streams per user, per
+	// instance (429 too_many_streams).
+	StreamsPerUser int
 }
 
 type limitSpec struct {
@@ -138,6 +141,12 @@ var limitSpecs = []limitSpec{
 		def:  100,
 		doc:  "Largest page size a list request may ask for",
 		bind: func(l *Limits) *int { return &l.PageMax },
+	},
+	{
+		env:  "LIMIT_STREAMS_PER_USER",
+		def:  5,
+		doc:  "Concurrent live event streams one user may hold open, per instance",
+		bind: func(l *Limits) *int { return &l.StreamsPerUser },
 	},
 }
 

@@ -63,6 +63,9 @@ func newStreamAPI(t *testing.T, setup streamSetup) *streamAPI {
 
 	o := setup.opts
 	o.Broker = b
+	if o.Slots == nil {
+		o.Slots = realtime.NewSlots(config.DefaultLimits().StreamsPerUser)
+	}
 	if o.Validator == nil {
 		o.Validator = e.Validator()
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"relaylab/internal/identity"
+	"relaylab/internal/platform/httpx"
 	"relaylab/internal/platform/logging"
 	"relaylab/internal/realtime"
 )
@@ -56,7 +57,9 @@ type SessionValidator interface {
 
 // StreamOptions configure GET /projects/{projectId}/events/stream.
 type StreamOptions struct {
-	Broker    *realtime.Broker
+	Broker *realtime.Broker
+	// Slots caps concurrent streams per user (LIMIT_STREAMS_PER_USER).
+	Slots     *realtime.Slots
 	Validator SessionValidator
 	// RevalidateEvery is how often the session and project are re-checked.
 	RevalidateEvery time.Duration
@@ -141,6 +144,13 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+
+	if !o.Slots.Acquire(owner) {
+		httpx.WriteError(w, r, http.StatusTooManyRequests, "too_many_streams",
+			"Too many live connections are open. Close another RelayLab tab and try again.")
+		return
+	}
+	defer o.Slots.Release(owner)
 
 	// Subscribe before anything is read or sent, so no event committed from
 	// here on can be missed.

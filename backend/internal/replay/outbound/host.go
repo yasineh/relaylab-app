@@ -98,7 +98,7 @@ func strictDottedQuad(labels []string) (netip.Addr, bool) {
 		if err != nil || n > 255 {
 			return netip.Addr{}, false
 		}
-		b[i] = byte(n)
+		b[i] = byte(n) //nolint:gosec // n is 0-255, checked above
 	}
 	return netip.AddrFrom4(b), true
 }

@@ -54,9 +54,10 @@ user agents, and bodies.
   render `<script>`, `<img onerror>`, `<svg onload>`, and `javascript:` URLs
   as inert text. Received values are never linked or used in URLs, styles, or
   attributes.
-- The raw view shows control characters and Unicode bidirectional overrides as
-  visible escapes (for example `‮`), so text cannot display differently
-  from what it contains.
+- Every received string (paths, header and query names and values, content
+  types, JSON keys and values, and raw text) shows control characters and
+  Unicode bidirectional overrides as highlighted escapes (for example
+  `\u202e`), so text cannot display differently from what it contains.
 - Dashboard pages are served with
   `Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none'`
   (plus related directives) and `X-Content-Type-Options: nosniff`.

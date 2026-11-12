@@ -7,7 +7,7 @@ export const HEX_PREVIEW_BYTES = 64 * 1024
  * make received text display differently from what it contains.
  */
 // oxlint-disable-next-line no-control-regex -- matching control characters is the point
-const INVISIBLE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F؜‎‏‪-‮⁦-⁩]/g
+const INVISIBLE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
 
 export type Segment = { text: string; escape: false } | { text: string; escape: true }
 

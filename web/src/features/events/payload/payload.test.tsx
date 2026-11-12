@@ -141,7 +141,7 @@ describe('JsonTree', () => {
 
 describe('raw and hex views', () => {
   it('shows control and bidi characters as visible escapes', () => {
-    expect(visibleSegments('a\u0000b\r\nc\td‮e')).toEqual([
+    expect(visibleSegments('a\u0000b\r\nc\td\u202Ee')).toEqual([
       { text: 'a', escape: false },
       { text: '\\u0000', escape: true },
       { text: 'b', escape: false },

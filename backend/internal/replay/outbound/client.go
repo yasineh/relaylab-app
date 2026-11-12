@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -191,7 +192,7 @@ func (c *Client) do(ctx context.Context, req Request) (Result, string) {
 	}
 	dest, err := c.pol.validateURL(req.URL)
 	if err != nil {
-		return failed(err), ""
+		return failed(err), logHost(req.URL)
 	}
 	host := dest.target.name
 	if dest.target.isIP() {
@@ -393,4 +394,22 @@ func sanitizeLocation(loc string) string {
 		s = s[:MaxURLBytes]
 	}
 	return s
+}
+
+// logHost is the host name of a rejected URL for logs: lower-case and
+// bounded. slog's JSON encoding escapes anything else, so it cannot inject
+// log lines. It is empty when the URL does not parse.
+func logHost(raw string) string {
+	if len(raw) > MaxURLBytes {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	h := strings.ToLower(u.Hostname())
+	if len(h) > maxHostLen {
+		h = h[:maxHostLen]
+	}
+	return h
 }

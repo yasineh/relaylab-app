@@ -6,8 +6,10 @@ import { CopyButton } from '@/components/copy-button'
 import { Alert } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Tabs } from '@/components/ui/tabs'
+import { useEndpoint } from '@/features/endpoints/api'
 import { eventBodyPath, useEvent, type Entry, type EventDetail } from '@/features/events/api'
 import { headersText, queryText, rawRequestText, requestTarget } from '@/features/events/copy-text'
+import { buildCurl } from '@/features/events/curl'
 import { MethodBadge } from '@/features/events/MethodBadge'
 import { base64ToBytes, formatBytes } from '@/features/events/payload/bytes'
 import { HexView } from '@/features/events/payload/HexView'
@@ -85,6 +87,8 @@ function EventView({ projectId, event: e }: { projectId: string; event: EventDet
         </p>
       </div>
 
+      <ReproduceCurl projectId={projectId} event={e} />
+
       <Alert tone="info">
         <p>
           Webhook payloads may contain confidential or personal data. Treat this page like the system that
@@ -118,6 +122,30 @@ function EventView({ projectId, event: e }: { projectId: string; event: EventDet
           { id: 'raw', label: 'Raw request', panel: <RawRequest event={e} /> },
         ]}
       />
+    </div>
+  )
+}
+
+function ReproduceCurl({ projectId, event: e }: { projectId: string; event: EventDetail }) {
+  const endpoint = useEndpoint(projectId, e.endpoint_id)
+  if (endpoint.isPending) return null
+  const url = endpoint.data?.url
+  if (!url) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        A curl command can&apos;t be built because this endpoint&apos;s receiving URL is unavailable.
+      </p>
+    )
+  }
+  const { command, notes } = buildCurl(e, url)
+  return (
+    <div className="space-y-1">
+      <CopyButton value={command} label="Copy as curl" />
+      {notes.map((n) => (
+        <p key={n} className="text-xs text-muted-foreground">
+          {n}
+        </p>
+      ))}
     </div>
   )
 }

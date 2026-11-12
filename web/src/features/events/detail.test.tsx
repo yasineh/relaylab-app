@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import type { EventDetail } from '@/features/events/api'
-import { PID, summary, withProject } from '@/features/events/fixtures'
+import { endpoint, EPID, PID, summary, withProject } from '@/features/events/fixtures'
 import { apiError } from '@/test/api'
 import { renderApp } from '@/test/render'
 
@@ -138,6 +138,32 @@ describe('event detail (4.2)', () => {
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Copy query parameters' }))
     expect(await navigator.clipboard.readText()).toBe('page=2\ntoken=[REDACTED]')
+  })
+
+  it('copies a reproduction curl command against the receiving URL', async () => {
+    const user = userEvent.setup()
+    withProject({
+      [ONE]: { body: detail() },
+      [`GET /api/v1/projects/${PID}/endpoints/${EPID}`]: { body: endpoint },
+    })
+    renderApp(`/projects/${PID}/events/${ID}`)
+    await user.click(await screen.findByRole('button', { name: 'Copy as curl' }))
+    const copied = await navigator.clipboard.readText()
+    expect(copied.split(' \\\n  ')[0]).toBe('curl -X POST')
+    expect(copied).toContain(`'${endpoint.url}/charge/succeeded?token=%5BREDACTED%5D&page=2'`)
+    expect(copied).toContain(`-H 'Authorization: [REDACTED]'`)
+    expect(copied).toContain(`--data-binary '{"id":"evt_1"`)
+    expect(screen.getByText(/does not include them/)).toBeInTheDocument()
+  })
+
+  it('explains when no curl command can be built', async () => {
+    withProject({
+      [ONE]: { body: detail() },
+      [`GET /api/v1/projects/${PID}/endpoints/${EPID}`]: { body: { ...endpoint, url: null } },
+    })
+    renderApp(`/projects/${PID}/events/${ID}`)
+    expect(await screen.findByText(/receiving URL is unavailable/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Copy as curl' })).not.toBeInTheDocument()
   })
 
   it('has no reveal control anywhere', async () => {

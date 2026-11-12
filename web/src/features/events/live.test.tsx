@@ -4,9 +4,9 @@ import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { createQueryClient } from '@/app/App'
-import type { EventSummary } from '@/features/events/api'
+import type { EventFilters, EventSummary } from '@/features/events/api'
 import { PID, project, summary } from '@/features/events/fixtures'
-import { useEventStream } from '@/features/events/live'
+import { matchesFilters, useEventStream } from '@/features/events/live'
 import { projectKey } from '@/features/projects/api'
 import { apiError, mockApi } from '@/test/api'
 import { FakeEventSource } from '@/test/event-source'
@@ -83,5 +83,32 @@ describe('useEventStream (3.1)', () => {
     act(() => FakeEventSource.last().open())
     unmount()
     expect(FakeEventSource.open()).toHaveLength(0)
+  })
+})
+
+describe('matchesFilters (3.2)', () => {
+  const e = summary({
+    method: 'POST',
+    endpoint_id: 'ep1',
+    content_type: 'Application/JSON; charset=utf-8',
+    received_at: '2026-11-03T09:15:00Z',
+  })
+  it.each([
+    [{}, true],
+    [{ method: ['POST', 'PUT'] }, true],
+    [{ method: ['GET'] }, false],
+    [{ endpoint_id: 'ep1' }, true],
+    [{ endpoint_id: 'ep2' }, false],
+    [{ content_type: 'application/json' }, true], // case-insensitive prefix, like the server
+    [{ content_type: 'text/' }, false],
+    [{ received_after: '2026-11-03T09:15:00Z' }, true], // inclusive
+    [{ received_after: '2026-11-03T09:15:01Z' }, false],
+    [{ received_before: '2026-11-03T09:15:00Z' }, false], // exclusive
+    [{ received_before: '2026-11-03T09:16:00Z' }, true],
+  ] satisfies [EventFilters, boolean][])('%j → %s', (f, want) => {
+    expect(matchesFilters(e, f)).toBe(want)
+  })
+  it('never matches a content type filter when the event has none', () => {
+    expect(matchesFilters(summary({ content_type: null }), { content_type: 'a' })).toBe(false)
   })
 })

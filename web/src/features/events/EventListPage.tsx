@@ -1,4 +1,4 @@
-import { Inbox, Loader2, SearchX } from 'lucide-react'
+import { ArrowUp, Inbox, Loader2, SearchX } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
@@ -15,6 +15,7 @@ import {
   type EventSummary,
 } from '@/features/events/api'
 import { EventFilterBar } from '@/features/events/EventFilterBar'
+import { useLiveEventList } from '@/features/events/live'
 import { MethodBadge } from '@/features/events/MethodBadge'
 import { formatBytes } from '@/features/events/payload/bytes'
 import { VisibleText } from '@/features/events/payload/RawText'
@@ -28,6 +29,7 @@ export function EventListPage() {
   const filters = filtersFromParams(params)
   const endpoints = useEndpoints(project.id)
   const events = useEvents(project.id, filters)
+  const live = useLiveEventList(project.id, filters)
 
   const apply = (f: EventFilters) => setParams(filtersToParams(f))
   const clear = () => setParams(new URLSearchParams())
@@ -49,6 +51,21 @@ export function EventListPage() {
         onApply={apply}
         onClear={clear}
       />
+      {live.hidden > 0 ? (
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground">
+          {countLabel(live.hidden)} {live.hidden === 1 ? 'doesn’t' : 'don’t'} match these filters.
+          <Button variant="outline" size="sm" onClick={clear}>
+            Clear filters
+          </Button>
+        </p>
+      ) : null}
+      {live.pending > 0 ? (
+        <div className="sticky top-4 z-10 flex justify-center">
+          <Button size="sm" className="rounded-full shadow-md" onClick={live.showPending}>
+            <ArrowUp aria-hidden="true" /> Show {countLabel(live.pending)}
+          </Button>
+        </div>
+      ) : null}
 
       {events.isPending ? (
         <output className="flex items-center gap-2 text-muted-foreground">
@@ -100,6 +117,8 @@ export function EventListPage() {
     </div>
   )
 }
+
+const countLabel = (n: number) => `${n} new ${n === 1 ? 'event' : 'events'}`
 
 function ListError({
   error,
@@ -166,7 +185,7 @@ function NoEvents({ projectId, endpoints }: { projectId: string; endpoints: Endp
         <>
           <p className="text-sm text-muted-foreground">
             Send a test request to <span className="font-medium text-foreground">{target.name}</span>, or
-            point a webhook provider at its receiving URL. It appears here once it arrives; reload to check.
+            point a webhook provider at its receiving URL. It appears here as soon as it arrives.
           </p>
           <pre className="w-full overflow-x-auto rounded-md border bg-muted/40 p-3 font-mono text-xs break-all whitespace-pre-wrap">
             {curlExample(target.url)}

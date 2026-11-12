@@ -170,11 +170,15 @@ describe('project list (4.2)', () => {
 
 describe('project overview (4.3)', () => {
   it('shows an owned project with setup guidance and honest empty sections', async () => {
-    mockApi({ ...signedIn, [`GET /api/v1/projects/${ID}`]: { body: project() } })
+    mockApi({
+      ...signedIn,
+      [`GET /api/v1/projects/${ID}`]: { body: project() },
+      [`GET /api/v1/projects/${ID}/events`]: { body: { items: [], next_cursor: null } },
+    })
     renderApp(`/projects/${ID}`)
     expect(await screen.findByRole('heading', { level: 1, name: 'Stripe sandbox' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Set up this project' })).toBeInTheDocument()
-    expect(screen.getByText(/not available in this version/)).toBeInTheDocument()
+    expect(await screen.findByText(/No events yet/)).toBeInTheDocument()
     expect(screen.getByText('Payment provider test hooks')).toBeInTheDocument()
   })
 

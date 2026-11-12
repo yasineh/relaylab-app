@@ -1,8 +1,9 @@
-import { Inbox, Webhook } from 'lucide-react'
+import { Webhook } from 'lucide-react'
 import { Link } from 'react-router'
 
 import { buttonVariants } from '@/components/ui/button'
 
+import { RecentEvents } from '@/features/events/RecentEvents'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { formatDateTime } from '@/lib/format'
 
@@ -43,15 +44,7 @@ export function ProjectOverviewPage() {
             Manage endpoints
           </Link>
         </section>
-        <section aria-labelledby="events-heading" className="rounded-lg border border-dashed bg-card p-6">
-          <Inbox aria-hidden="true" className="mb-2 size-5 text-primary" />
-          <h2 id="events-heading" className="font-medium">
-            Recent events
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Viewing received webhooks is not available in this version of RelayLab yet.
-          </p>
-        </section>
+        <RecentEvents projectId={project.id} />
       </div>
 
       <p className="text-xs text-muted-foreground">

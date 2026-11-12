@@ -2,8 +2,11 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
+import { base64ToBytes, HEX_PREVIEW_BYTES, hexDump, visibleSegments } from '@/features/events/payload/bytes'
+import { HexView } from '@/features/events/payload/HexView'
 import { parseJson, visibleRows, type Json } from '@/features/events/payload/json-rows'
 import { JsonTree, VIRTUALIZE_ABOVE } from '@/features/events/payload/JsonTree'
+import { RawText } from '@/features/events/payload/RawText'
 
 const nested = {
   a: { b: { c: { d: { e: 1 } } } },
@@ -122,5 +125,47 @@ describe('JsonTree', () => {
       'aria-expanded',
       'false',
     )
+  })
+})
+
+describe('raw and hex views', () => {
+  it('shows control and bidi characters as visible escapes', () => {
+    expect(visibleSegments('a\u0000b\r\nc\td‮e')).toEqual([
+      { text: 'a', escape: false },
+      { text: '\\u0000', escape: true },
+      { text: 'b', escape: false },
+      { text: '\\r', escape: true },
+      { text: '\nc\td', escape: false },
+      { text: '\\u202e', escape: true },
+      { text: 'e', escape: false },
+    ])
+    render(<RawText text={'x\u0007y'} />)
+    expect(screen.getByLabelText('Raw body')).toHaveTextContent('x\\u0007y')
+  })
+
+  it('hex-dumps the binary fixture', () => {
+    const bytes = base64ToBytes(btoa(String.fromCharCode(0xff, 0xfe, 0x00)))
+    expect(Array.from(bytes)).toEqual([0xff, 0xfe, 0x00])
+    expect(hexDump(bytes).text).toBe(
+      `00000000  ff fe 00${' '.repeat(3 * 5)}  ${' '.repeat(3 * 8 - 1)}  |...|`,
+    )
+    render(<HexView bytes={bytes} downloadHref="/api/v1/projects/p/events/e/body" />)
+    expect(screen.getByLabelText('Hex dump')).toHaveTextContent('00000000 ff fe 00')
+    expect(screen.getByRole('link', { name: 'Download raw' })).toHaveAttribute(
+      'href',
+      '/api/v1/projects/p/events/e/body',
+    )
+  })
+
+  it('formats full rows and stops at the preview limit', () => {
+    const bytes = new Uint8Array(HEX_PREVIEW_BYTES + 10).map((_, i) => i % 256)
+    const { text, truncated } = hexDump(bytes)
+    expect(truncated).toBe(true)
+    expect(text.split('\n')).toHaveLength(HEX_PREVIEW_BYTES / 16)
+    expect(text.split('\n')[4]).toBe(
+      '00000040  40 41 42 43 44 45 46 47  48 49 4a 4b 4c 4d 4e 4f  |@ABCDEFGHIJKLMNO|',
+    )
+    render(<HexView bytes={bytes} downloadHref="/x" />)
+    expect(screen.getByText(/Showing the first 64 KiB of 65,546 bytes/)).toBeInTheDocument()
   })
 })

@@ -36,24 +36,24 @@ var global6 = netip.MustParsePrefix("2000::/3")
 // outside 2000::/3 (::, ::1, fc00::/7, fe80::/10, ...) are already excluded by
 // the global unicast rule; they are listed so the table matches the spec.
 var blocked6 = prefixes(
-	"::/128",          // unspecified
-	"::1/128",         // loopback
-	"::/96",           // IPv4-compatible (deprecated), any embedded address
-	"::ffff:0:0/96",   // IPv4-mapped, any embedded address
-	"64:ff9b::/96",    // NAT64, any embedded address
-	"64:ff9b:1::/48",  // local-use NAT64
-	"100::/64",        // discard-only
-	"2001::/32",       // Teredo, any embedded address
-	"2001:10::/28",    // ORCHID (deprecated)
-	"2001:20::/28",    // ORCHIDv2
-	"2001:db8::/32",   // documentation
-	"2002::/16",       // 6to4, any embedded address
-	"3fff::/20",       // documentation (RFC 9637)
-	"5f00::/16",       // SRv6 SIDs
-	"fc00::/7",        // unique local, including AWS metadata fd00:ec2::254
-	"fe80::/10",       // link-local
-	"fec0::/10",       // site-local (deprecated)
-	"ff00::/8",        // multicast
+	"::/128",         // unspecified
+	"::1/128",        // loopback
+	"::/96",          // IPv4-compatible (deprecated), any embedded address
+	"::ffff:0:0/96",  // IPv4-mapped, any embedded address
+	"64:ff9b::/96",   // NAT64, any embedded address
+	"64:ff9b:1::/48", // local-use NAT64
+	"100::/64",       // discard-only
+	"2001::/32",      // Teredo, any embedded address
+	"2001:10::/28",   // ORCHID (deprecated)
+	"2001:20::/28",   // ORCHIDv2
+	"2001:db8::/32",  // documentation
+	"2002::/16",      // 6to4, any embedded address
+	"3fff::/20",      // documentation (RFC 9637)
+	"5f00::/16",      // SRv6 SIDs
+	"fc00::/7",       // unique local, including AWS metadata fd00:ec2::254
+	"fe80::/10",      // link-local
+	"fec0::/10",      // site-local (deprecated)
+	"ff00::/8",       // multicast
 )
 
 func prefixes(ss ...string) []netip.Prefix {

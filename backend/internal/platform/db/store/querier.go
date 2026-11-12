@@ -11,8 +11,14 @@ import (
 )
 
 type Querier interface {
+	// Writes the result only while the caller still holds the job's lease, and
+	// erases the override ciphertext.
+	CompleteReplay(ctx context.Context, arg CompleteReplayParams) (int64, error)
+	CountActiveReplays(ctx context.Context, projectID pgtype.UUID) (int32, error)
 	CountEndpoints(ctx context.Context, projectID pgtype.UUID) (int32, error)
 	CountProjects(ctx context.Context, ownerID string) (int32, error)
+	CountQueuedJobs(ctx context.Context, kind string) (int32, error)
+	CountRunningJobs(ctx context.Context, projectID pgtype.UUID) (int32, error)
 	CreateEndpoint(ctx context.Context, arg CreateEndpointParams) (CreateEndpointRow, error)
 	// Every query is scoped by owner_id: there is deliberately no query that loads
 	// a project by id alone (ownership is enforced in the data layer too).
@@ -21,6 +27,14 @@ type Querier interface {
 	DeleteEndpoint(ctx context.Context, arg DeleteEndpointParams) (DeleteEndpointRow, error)
 	// One statement; everything scoped to the project goes by FK cascade.
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
+	DeleteStaleWorkerHeartbeats(ctx context.Context) error
+	// Keys are honoured for 24 hours; an older row gives its key up for reuse.
+	ExpireIdempotencyKey(ctx context.Context, arg ExpireIdempotencyKeyParams) error
+	ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) (int64, error)
+	// A dead job's replay ends failed/worker_lost, with secrets erased.
+	FailReplayWorkerLost(ctx context.Context, arg FailReplayWorkerLostParams) (int64, error)
+	// Only the lease holder may finish a job.
+	FinishJob(ctx context.Context, arg FinishJobParams) (int64, error)
 	GetEndpoint(ctx context.Context, arg GetEndpointParams) (GetEndpointRow, error)
 	// Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
 	GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error)
@@ -31,6 +45,11 @@ type Querier interface {
 	// truncated to is applied here.
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]byte, error)
+	// Replay queries (add-event-replay). API reads and writes are owner-scoped
+	// through app.projects; worker queries are keyed by job and replay ids and
+	// every result write is checked against the job lease.
+	// The stored request to replay, for the project's owner.
+	GetEventForReplay(ctx context.Context, arg GetEventForReplayParams) (GetEventForReplayRow, error)
 	// Resolves a Last-Event-ID. No row means it is not this owner's project's event.
 	GetEventReceivedAt(ctx context.Context, arg GetEventReceivedAtParams) (pgtype.Timestamptz, error)
 	// Live stream queries (add-live-event-stream), owner-scoped like the explorer.
@@ -38,14 +57,28 @@ type Querier interface {
 	// are silently left out.
 	GetEventSummaries(ctx context.Context, arg GetEventSummariesParams) ([]GetEventSummariesRow, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)
+	GetReplay(ctx context.Context, arg GetReplayParams) (GetReplayRow, error)
+	GetReplayByIdempotencyKey(ctx context.Context, arg GetReplayByIdempotencyKeyParams) (GetReplayByIdempotencyKeyRow, error)
+	// Worker: replay delivery.
+	// The replay and its event, for the job holding the lease.
+	GetReplayForDelivery(ctx context.Context, id pgtype.UUID) (GetReplayForDeliveryRow, error)
 	// The only query Go runs against Better Auth's tables: read-only session lookup
 	// by the token from a signature-verified cookie (design decision 2, option A).
 	GetSessionByToken(ctx context.Context, token string) (GetSessionByTokenRow, error)
+	// A sink must be an endpoint of the same project, owned by the caller.
+	GetSinkEndpoint(ctx context.Context, arg GetSinkEndpointParams) (GetSinkEndpointRow, error)
+	GetSinkForDelivery(ctx context.Context, id pgtype.UUID) (GetSinkForDeliveryRow, error)
+	// URL replay is available while some worker reported an active guard within
+	// the window.
+	GuardActiveRecently(ctx context.Context, windowSeconds int32) (bool, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
 	// Webhook event queries. Ingestion runs these without an owner: the endpoint
 	// token is the capability, and endpoint_id/project_id come from the token
 	// lookup, never from the request.
 	InsertEvent(ctx context.Context, arg InsertEventParams) error
+	InsertJob(ctx context.Context, arg InsertJobParams) error
+	InsertReplayAttempt(ctx context.Context, arg InsertReplayAttemptParams) error
+	ListAuditLog(ctx context.Context, arg ListAuditLogParams) ([]ListAuditLogRow, error)
 	ListEndpointEventsAsc(ctx context.Context, arg ListEndpointEventsAscParams) ([]ListEndpointEventsAscRow, error)
 	ListEndpointEventsDesc(ctx context.Context, arg ListEndpointEventsDescParams) ([]ListEndpointEventsDescRow, error)
 	ListEndpoints(ctx context.Context, arg ListEndpointsParams) ([]ListEndpointsRow, error)
@@ -70,6 +103,9 @@ type Querier interface {
 	// (project_id, received_at).
 	ListEventsReceivedSince(ctx context.Context, arg ListEventsReceivedSinceParams) ([]ListEventsReceivedSinceRow, error)
 	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
+	// Newest first, keyed by (created_at, id). The optional filters narrow
+	// inside the owner's project; cursor_created_at is NULL on the first page.
+	ListReplays(ctx context.Context, arg ListReplaysParams) ([]ListReplaysRow, error)
 	// Endpoint queries. Every dashboard query is scoped to the owner by joining
 	// app.projects (owner_id = the session user). Only GetEndpointByTokenHash, used
 	// by public ingestion, looks endpoints up without an owner: the token is the
@@ -79,10 +115,23 @@ type Querier interface {
 	// Serialises creates per owner for the limit check (the user row lives in the
 	// auth schema, where the api cannot take row locks).
 	LockOwnerProjects(ctx context.Context, ownerID string) error
+	// Serializes claims for one project within the claim transaction, so the
+	// running count below is exact.
+	LockProjectJobs(ctx context.Context, projectID pgtype.UUID) error
+	// Worker: job queue.
+	// Candidate jobs for one claim transaction; rows locked by other workers are
+	// skipped, so no two workers can claim the same job.
+	LockQueuedJobs(ctx context.Context, arg LockQueuedJobsParams) ([]LockQueuedJobsRow, error)
+	MarkJobRunning(ctx context.Context, arg MarkJobRunningParams) (MarkJobRunningRow, error)
+	MarkReplayRunning(ctx context.Context, arg MarkReplayRunningParams) (int64, error)
 	// Delivered to listeners only when the surrounding transaction commits.
 	NotifyEvent(ctx context.Context, payload string) error
+	// Wakes idle workers; they also poll, so a lost notification only delays.
+	NotifyJobs(ctx context.Context) error
 	// Readiness probe: a trivial round trip using the runtime role.
 	Ping(ctx context.Context) (int32, error)
+	// Expired leases go back to the queue, or to dead after max_attempts claims.
+	ReapExpiredJobs(ctx context.Context) ([]ReapExpiredJobsRow, error)
 	RotateEndpointToken(ctx context.Context, arg RotateEndpointTokenParams) (RotateEndpointTokenRow, error)
 	// Never moves last_received_at backwards when requests commit out of order.
 	TouchEndpointReceived(ctx context.Context, arg TouchEndpointReceivedParams) error
@@ -91,6 +140,8 @@ type Querier interface {
 	// NULL arguments keep the current value; set_description distinguishes
 	// "leave unchanged" from "clear the description".
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (AppProject, error)
+	// Worker heartbeats.
+	UpsertWorkerHeartbeat(ctx context.Context, arg UpsertWorkerHeartbeatParams) error
 }
 
 var _ Querier = (*Queries)(nil)

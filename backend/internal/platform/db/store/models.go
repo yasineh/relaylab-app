@@ -37,6 +37,23 @@ type AppEndpoint struct {
 	UpdatedAt       pgtype.Timestamptz
 }
 
+// Background job queue (replay.deliver); claimed with SKIP LOCKED leases
+type AppJob struct {
+	ID             pgtype.UUID
+	Kind           string
+	ProjectID      pgtype.UUID
+	Payload        []byte
+	State          string
+	RunAt          pgtype.Timestamptz
+	Attempts       int32
+	MaxAttempts    int32
+	LeaseOwner     pgtype.Text
+	LeaseExpiresAt pgtype.Timestamptz
+	LastError      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
 // User-owned projects; deleting one cascades to all project-scoped data
 type AppProject struct {
 	ID          pgtype.UUID
@@ -45,6 +62,35 @@ type AppProject struct {
 	Description pgtype.Text
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+}
+
+// Replays of stored events; override values only encrypted and erased when terminal
+type AppReplayAttempt struct {
+	ID                        pgtype.UUID
+	ProjectID                 pgtype.UUID
+	EventID                   pgtype.UUID
+	ActorUserID               pgtype.Text
+	DestinationType           string
+	TargetUrl                 pgtype.Text
+	SinkEndpointID            pgtype.UUID
+	Method                    string
+	HeaderOverrideNames       []string
+	HeaderOverridesCiphertext []byte
+	State                     string
+	Outcome                   pgtype.Text
+	FailureMessage            pgtype.Text
+	Tries                     int32
+	ResponseStatus            pgtype.Int4
+	ResponseHeaders           []byte
+	ResponseBody              []byte
+	ResponseTruncated         bool
+	StartedAt                 pgtype.Timestamptz
+	FinishedAt                pgtype.Timestamptz
+	DurationMs                pgtype.Int4
+	IdempotencyKey            pgtype.Text
+	RequestFingerprint        []byte
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
 }
 
 // Accepted webhook requests; sensitive header and query values redacted before insert, body stored as received
@@ -68,6 +114,13 @@ type AppWebhookEvent struct {
 	SourceIpPrefix      *netip.Addr
 	UserAgent           pgtype.Text
 	CorrelationID       string
+}
+
+type AppWorkerHeartbeat struct {
+	WorkerID      string
+	OutboundGuard string
+	Version       string
+	SeenAt        pgtype.Timestamptz
 }
 
 type AuthSession struct {

@@ -221,3 +221,34 @@ func TestEmbeddedWebAppAndAPI404(t *testing.T) {
 		t.Fatalf("/api/v1/unknown: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// TestEventPagesCSP: the explorer pages, which display untrusted webhook
+// content, are served with a CSP that forbids inline and foreign scripts,
+// plugins, and framing.
+func TestEventPagesCSP(t *testing.T) {
+	fsys := fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>RelayLab</title>")}}
+	h := testRouter(t, webui.Handler(fsys))
+	for _, p := range []string{"/projects/p1/events", "/projects/p1/events/e1", "/projects/p1/events?method=POST"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		csp := rec.Header().Get("Content-Security-Policy")
+		if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
+			t.Fatalf("%s: %d %v", p, rec.Code, rec.Header())
+		}
+		directives := map[string]string{}
+		for _, d := range strings.Split(csp, ";") {
+			name, value, _ := strings.Cut(strings.TrimSpace(d), " ")
+			directives[name] = value
+		}
+		for name, want := range map[string]string{
+			"default-src": "'self'", "script-src": "'self'", "object-src": "'none'", "frame-ancestors": "'none'",
+		} {
+			if directives[name] != want {
+				t.Errorf("%s: %s = %q, want %q (CSP %q)", p, name, directives[name], want, csp)
+			}
+		}
+		if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("%s: missing nosniff", p)
+		}
+	}
+}

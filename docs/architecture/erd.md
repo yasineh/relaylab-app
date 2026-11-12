@@ -9,9 +9,9 @@ updated by every change that alters the schema.
 
 The `auth` schema holds Better Auth's tables (users, sessions, credentials).
 The `app` schema holds `projects` (owned by `auth."user"` across schemas),
-their webhook `endpoints`, the received `webhook_events`, and the shared
-`audit_log`. Replays are added by a later change, cascading from
-`app.projects`.
+their webhook `endpoints`, the received `webhook_events`, the shared
+`audit_log`, the `replay_attempts` of events, the background `jobs` queue,
+and `worker_heartbeats`.
 
 ```mermaid
 erDiagram
@@ -23,6 +23,59 @@ erDiagram
   auth_user |o--o{ app_audit_log : "actor (set null)"
   app_endpoints ||--o{ app_webhook_events : "receives (cascade)"
   app_projects ||--o{ app_webhook_events : "scopes (cascade)"
+  app_projects ||--o{ app_replay_attempts : "has (cascade)"
+  app_webhook_events ||--o{ app_replay_attempts : "replayed as (cascade)"
+  app_endpoints |o--o{ app_replay_attempts : "sink (set null)"
+  auth_user |o--o{ app_replay_attempts : "actor (set null)"
+  app_projects |o--o{ app_jobs : "queues (cascade)"
+  app_replay_attempts {
+    uuid id PK "UUIDv7"
+    uuid project_id FK
+    uuid event_id FK "with project_id"
+    text actor_user_id FK "nullable"
+    text destination_type "url | sink"
+    text target_url "url only, <= 2048"
+    uuid sink_endpoint_id FK "sink only, nullable"
+    text method "GET POST PUT PATCH DELETE"
+    text_array header_override_names
+    bytea header_overrides_ciphertext "AES-256-GCM, null when terminal"
+    text state "queued running succeeded failed"
+    text outcome "succeeded or failure category"
+    text failure_message "nullable"
+    integer tries
+    integer response_status "nullable"
+    jsonb response_headers "redacted"
+    bytea response_body "excerpt"
+    boolean response_truncated
+    timestamptz started_at
+    timestamptz finished_at
+    integer duration_ms
+    text idempotency_key "nullable"
+    bytea request_fingerprint "SHA-256"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  app_jobs {
+    uuid id PK "UUIDv7"
+    text kind "replay.deliver"
+    uuid project_id FK "nullable"
+    jsonb payload
+    text state "queued running done dead"
+    timestamptz run_at
+    integer attempts "lease claims"
+    integer max_attempts
+    text lease_owner "nullable"
+    timestamptz lease_expires_at "nullable"
+    text last_error "category"
+    timestamptz created_at
+    timestamptz updated_at
+  }
+  app_worker_heartbeats {
+    text worker_id PK
+    text outbound_guard "active | inactive"
+    text version
+    timestamptz seen_at
+  }
   app_endpoints {
     uuid id PK "UUIDv7"
     uuid project_id FK
@@ -119,7 +172,7 @@ erDiagram
 
 | Schema | Owner role | Managed by | Contents today |
 |---|---|---|---|
-| `app` | `app_migrator` | goose migrations in `backend/migrations/` | `projects`, `endpoints`, `webhook_events`, `audit_log`, `goose_db_version` (migration bookkeeping) |
+| `app` | `app_migrator` | goose migrations in `backend/migrations/` | `projects`, `endpoints`, `webhook_events`, `audit_log`, `replay_attempts`, `jobs`, `worker_heartbeats`, `goose_db_version` (migration bookkeeping) |
 | `auth` | `auth_migrator` | Better Auth 1.7.18 migrations (`auth/src/migrate.ts`) | `user`, `session`, `account`, `verification`, `rateLimit` |
 
 Nothing is created in `public`; `CREATE` on `public` is revoked.
@@ -180,7 +233,7 @@ never stored.
 
 Indexes and keys: `endpoints_token_hash_key` (unique `token_hash`),
 `endpoints_id_project_key` (unique `(id, project_id)`, the target of the
-`webhook_events` composite foreign key; added by `00004_webhook_events.sql`),
+`webhook_events` and `replay_attempts` composite foreign keys; added by `00004_webhook_events.sql`),
 and `endpoints_project_created_idx (project_id, created_at DESC)` for the
 owner-scoped, newest-first list. At most `LIMIT_ENDPOINTS_PER_PROJECT`
 endpoints per project (default 25).
@@ -219,6 +272,8 @@ Indexes: `webhook_events_project_id_idx (project_id, id DESC)` for the project
 feed and cursor, `webhook_events_endpoint_id_idx (endpoint_id, id DESC)`,
 `webhook_events_project_method_idx (project_id, method, id DESC)`, and
 `webhook_events_project_received_idx (project_id, received_at)` for retention.
+`webhook_events_id_project_key` (unique `(id, project_id)`, added by
+`00005_replay.sql`) is the target of the `replay_attempts` composite foreign key.
 
 ### `app.audit_log`
 
@@ -238,6 +293,83 @@ secrets, or payloads.
 | `created_at` | timestamptz, not null | Default `now()` |
 
 Index: `audit_log_project_created_idx (project_id, created_at DESC, id DESC)`.
+
+### `app.replay_attempts`
+
+One row per replay a user starts; `tries` counts deliveries within it.
+Created by `backend/migrations/00005_replay.sql`. The original event is never
+changed by a replay.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key, UUIDv7; sent to destinations as `X-RelayLab-Replay-Id` |
+| `project_id` | uuid, not null | FK → `app.projects(id)` **`ON DELETE CASCADE`** |
+| `event_id` | uuid, not null | With `project_id`: composite FK → `app.webhook_events(id, project_id)` **`ON DELETE CASCADE`**, so the event is in the same project |
+| `actor_user_id` | text, nullable | FK → `auth."user"(id)` **`ON DELETE SET NULL`** |
+| `destination_type` | text, not null | `url` or `sink` |
+| `target_url` | text, nullable | The URL as entered (1–2048 characters); set exactly for `url` replays |
+| `sink_endpoint_id` | uuid, nullable | With `project_id`: composite FK → `app.endpoints(id, project_id)` **`ON DELETE SET NULL (sink_endpoint_id)`**: the sink is in the same project, and deleting it keeps the replay. Never set for `url` replays |
+| `method` | text, not null | `GET`, `POST`, `PUT`, `PATCH`, or `DELETE` |
+| `header_override_names` | text[], not null | Names of headers the user added (values are never stored in plaintext) |
+| `header_overrides_ciphertext` | bytea, nullable | AES-256-GCM of the override values. **Null once the replay is terminal** (`CHECK`) |
+| `state` | text, not null | `queued`, `running`, `succeeded`, `failed` |
+| `outcome` | text, nullable | Set exactly when terminal (`CHECK`): `succeeded` or a failure category (`blocked_address`, `timeout`, `sink_disabled`, `worker_lost`, ...) |
+| `failure_message` | text, nullable | Safe, fixed message per category (at most 300 characters); never addresses or raw errors |
+| `tries` | integer, not null | Deliveries made (at most `REPLAY_MAX_TRIES`) |
+| `response_status` | integer, nullable | Status of the final try |
+| `response_headers` | jsonb, nullable | `[[name, value], ...]`, sensitive values `[REDACTED]` |
+| `response_body` | bytea, nullable | Body excerpt, at most `REPLAY_RESPONSE_EXCERPT_BYTES` |
+| `response_truncated` | boolean, not null | The body was longer than the excerpt |
+| `started_at`, `finished_at` | timestamptz, nullable | First claim and terminal time |
+| `duration_ms` | integer, nullable | Total delivery time |
+| `idempotency_key` | text, nullable | Client `Idempotency-Key` (1–128 characters), honoured for 24 hours |
+| `request_fingerprint` | bytea, nullable | SHA-256 of the canonical create request, compared on key reuse |
+| `created_at`, `updated_at` | timestamptz, not null | Default `now()` |
+
+Indexes: `replay_attempts_idempotency_idx` (unique `(project_id,
+idempotency_key)` where a key is set), `replay_attempts_project_created_idx
+(project_id, created_at DESC, id DESC)` for history,
+`replay_attempts_event_created_idx (event_id, created_at DESC, id DESC)` for an
+event's replays, `replay_attempts_active_idx (project_id, state)` for queued
+and running replays (queue-depth limit), and `replay_attempts_sink_idx`.
+
+### `app.jobs`
+
+The background job queue (D5), used by the worker for `replay.deliver`.
+Workers claim jobs with `FOR UPDATE SKIP LOCKED` and hold a lease; only the
+lease holder may finish a job.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid | Primary key, UUIDv7 |
+| `kind` | text, not null | `replay.deliver` (1–64 characters) |
+| `project_id` | uuid, nullable | FK → `app.projects(id)` **`ON DELETE CASCADE`**: deleting a project removes its queued and running jobs |
+| `payload` | jsonb, not null | A JSON object; for replays `{"replay_id": ...}` |
+| `state` | text, not null | `queued`, `running`, `done`, `dead` |
+| `run_at` | timestamptz, not null | Not claimed before this time |
+| `attempts` | integer, not null | Times claimed. A job whose lease expires `max_attempts` times becomes `dead` |
+| `max_attempts` | integer, not null | `REPLAY_MAX_LEASE_LOSSES` for replays |
+| `lease_owner`, `lease_expires_at` | text, timestamptz, nullable | Set exactly while `running` (`CHECK`) |
+| `last_error` | text, nullable | A category such as `lease_expired`, at most 200 characters; never raw errors |
+| `created_at`, `updated_at` | timestamptz, not null | Default `now()` |
+
+Indexes: `jobs_queued_run_at_idx (run_at) WHERE state = 'queued'`,
+`jobs_project_state_idx (project_id, state)` for per-project concurrency, and
+`jobs_running_lease_idx (lease_expires_at) WHERE state = 'running'` for the
+reaper.
+
+### `app.worker_heartbeats`
+
+Each worker reports its outbound guard self-check here every 15 seconds. The
+API offers URL replay only while some worker reported `active` within 60
+seconds.
+
+| Column | Type | Notes |
+|---|---|---|
+| `worker_id` | text | Primary key (1–128 characters) |
+| `outbound_guard` | text, not null | `active` or `inactive` |
+| `version` | text, not null | Worker build revision |
+| `seen_at` | timestamptz, not null | Last heartbeat; rows older than a day are deleted by workers |
 
 ### `auth` tables (created by Better Auth)
 
@@ -280,8 +412,11 @@ deleting a project or its owner must leave no rows behind. There is no archive
 or restore.
 
 - **Projects**: kept until the owner deletes them (type-to-confirm in project settings) or deletes their account.
-- **Endpoints**: kept until the owner deletes the endpoint (type-to-confirm) or its project. Deleting an endpoint removes its events and replays by cascade; rotating its token keeps them.
+- **Endpoints**: kept until the owner deletes the endpoint (type-to-confirm) or its project. Deleting an endpoint removes its events and, through them, their replays; replays that used it as a sink are kept with `sink_endpoint_id` cleared. Rotating its token keeps everything.
 - **Webhook events**: kept until their endpoint or project is deleted (by cascade). An age-based retention purge is planned in `add-event-retention`; until then events have no automatic expiry. Credential header and query values are never stored.
+- **Replay attempts**: kept until their event or project is deleted (by cascade). Header override values are erased (ciphertext set to null) as soon as the replay is terminal; response excerpts are kept with the replay.
+- **Jobs**: deleted with their project, including queued and running ones; a worker whose rows disappear mid-run stops without writing. Finished (`done`, `dead`) rows have no automatic expiry yet; purging them is planned in `add-event-retention`.
+- **Worker heartbeats**: one row per worker; rows not updated for a day are deleted by running workers.
 - **Audit log**: kept with its project and deleted with it. If the actor's account is deleted, `actor_user_id` becomes `NULL` (in practice the actor's projects, and so these rows, are deleted too).
 
 - **Accounts**: kept until the user deletes their account (Account settings → Delete account), which removes the `user` row and, by cascade, its sessions, credentials, and projects (with their endpoints, events, and audit entries).

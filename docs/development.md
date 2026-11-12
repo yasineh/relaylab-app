@@ -146,6 +146,17 @@ Authentication and mail ([details](security/authentication.md)):
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | — | Mail server. Required in production. Without `SMTP_HOST` outside production, emails are only logged as captured, not delivered |
 | `MAIL_FROM` | `RelayLab <no-reply@relaylab.localhost>` | Sender address. Quote it in `.env` because of the `<` |
 
+Outbound requests (replay destinations), read by the worker ([details](security/outbound-replay.md)):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `OUTBOUND_ALLOW_HTTP` | `false` | Allow `http://` destinations and port 80. Local development only: the worker refuses to start with it in production |
+| `OUTBOUND_ALLOWED_PORTS` | `443,8443` | Destination ports allowed |
+| `OUTBOUND_BLOCKED_HOSTS` | empty | Extra host names (with subdomains) that are never destinations, on top of RelayLab's own hosts, the database hosts, and internal names |
+| `OUTBOUND_CONNECT_TIMEOUT`, `OUTBOUND_TLS_TIMEOUT`, `OUTBOUND_HEADER_TIMEOUT`, `OUTBOUND_TOTAL_TIMEOUT` | `3s`, `3s`, `5s`, `10s` | Each at most `1m`; the total covers the whole request including the body |
+| `OUTBOUND_MAX_RESPONSE_BYTES` | 65536 | Response body kept (at most 262144); longer bodies are truncated |
+| `OUTBOUND_MAX_CONCURRENCY` | 8 | Requests in flight per worker process |
+
 The processes refuse to start when a variable is missing or malformed. The error
 names the variable but never prints its value.
 

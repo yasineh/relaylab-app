@@ -35,6 +35,17 @@ const (
 // retryMillis is sent as `retry:` on connect: the browser's reconnect delay.
 const retryMillis = 3000
 
+// Resume (live-event-stream spec, "Resume without gaps").
+const (
+	// backfillMax is the most missed events a reconnect replays; beyond it
+	// the client must reload its list (resync.required).
+	backfillMax = 500
+	// backfillOverlap re-reads events received shortly before the last one
+	// the client saw: ids are generated before commit, so an event with an
+	// earlier time can commit (and notify) after a later one.
+	backfillOverlap = 5 * time.Second
+)
+
 // liveBatchMax bounds how many buffered ids one summary query loads.
 const liveBatchMax = 64
 
@@ -51,6 +62,8 @@ type StreamOptions struct {
 	RevalidateEvery time.Duration
 	// Heartbeat is the interval between `: ping` comments.
 	Heartbeat time.Duration
+	// afterSubscribe runs between subscribing and backfill (tests only).
+	afterSubscribe func()
 	// WriteTimeout bounds each write; a client that cannot take a message
 	// within it is disconnected.
 	WriteTimeout time.Duration
@@ -152,6 +165,19 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	seen := newSeenSet()
+	if o.afterSubscribe != nil {
+		o.afterSubscribe()
+	}
+	switch err := h.backfill(ctx, out, seen, owner, projectID, lastEventID(r)); {
+	case errors.Is(err, errTooManyMissed):
+		_ = out.send(sseResyncRequired, "", reasonJSON{Reason: resyncTooMany})
+		return
+	case err != nil:
+		if ctx.Err() == nil {
+			log.Warn("event stream backfill failed", slog.String("error", err.Error()))
+		}
+		return
+	}
 
 	heartbeat := time.NewTicker(o.Heartbeat)
 	defer heartbeat.Stop()
@@ -183,6 +209,51 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+var errTooManyMissed = errors.New("too many missed events")
+
+// lastEventID returns the resume point: the Last-Event-ID header that
+// EventSource sends when it reconnects, else the last_event_id query
+// parameter (for a first connection). The header wins because it is the
+// newest id the browser received; the query parameter stays at its original
+// value across reconnects. Anything that is not a UUID is ignored.
+func lastEventID(r *http.Request) uuid.UUID {
+	raw := r.Header.Get("Last-Event-ID")
+	if raw == "" {
+		raw = r.URL.Query().Get("last_event_id")
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil || len(raw) != len(id.String()) {
+		return uuid.Nil
+	}
+	return id
+}
+
+// backfill sends the events received after last, oldest first, before any
+// live event. The subscription already exists, so an event committed during
+// backfill is both read here and buffered live; the seen set sends it once.
+// An id that is not an event in owner's project is ignored (live only).
+func (h *Handler) backfill(ctx context.Context, out *sseWriter, seen *seenSet, owner string, project, last uuid.UUID) error {
+	if last == uuid.Nil {
+		return nil
+	}
+	at, err := h.svc.ReceivedAt(ctx, owner, project, last)
+	if errors.Is(err, ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	items, err := h.svc.ReceivedSince(ctx, owner, project, at.Add(-backfillOverlap), backfillMax+1)
+	if err != nil {
+		return err
+	}
+	if len(items) > backfillMax {
+		return errTooManyMissed
+	}
+	seen.add(last) // the client has it
+	return sendSummaries(out, seen, items)
 }
 
 // drain collects first plus whatever else is already buffered, up to liveBatchMax.

@@ -127,8 +127,13 @@ type sseConn struct {
 // for 200 responses, frames arrive on msgs.
 func (a *streamAPI) open(t *testing.T, cookie string, project uuid.UUID, header http.Header) *sseConn {
 	t.Helper()
+	return a.openURL(t, cookie, a.url(project), header)
+}
+
+func (a *streamAPI) openURL(t *testing.T, cookie, url string, header http.Header) *sseConn {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.url(project), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -17,27 +17,55 @@ var strippedHeaders = map[string]bool{
 	"accept-encoding": true, "user-agent": true,
 }
 
+// Stripped reports whether the client drops this header when it comes from
+// derived (non-explicit) headers.
+func Stripped(name string) bool { return strippedHeader(strings.ToLower(name)) }
+
 func strippedHeader(lower string) bool {
 	return strippedHeaders[lower] || strings.HasPrefix(lower, "proxy-") || strings.HasPrefix(lower, "x-forwarded-")
 }
 
+// ExplicitForbidden reports whether a user may not set this header
+// explicitly: everything stripped from derived headers except Authorization,
+// which a user may add on purpose (encrypted at rest by replay).
+func ExplicitForbidden(name string) bool {
+	lower := strings.ToLower(name)
+	return lower != "authorization" && strippedHeader(lower)
+}
+
+func validHeader(name string, values []string) bool {
+	if !isToken(name) {
+		return false
+	}
+	for _, v := range values {
+		if strings.ContainsAny(v, "\r\n\x00") {
+			return false
+		}
+	}
+	return true
+}
+
 // outboundHeader returns the headers to send. A name or value containing CR,
 // LF, or NUL, or a name that is not an HTTP token, fails the whole request
-// with invalid_request: nothing is sent.
-func (c *Client) outboundHeader(in http.Header) (http.Header, *Error) {
+// with invalid_request: nothing is sent. So does a forbidden explicit header.
+func (c *Client) outboundHeader(derived, explicit http.Header) (http.Header, *Error) {
 	out := http.Header{}
-	for name, values := range in {
-		if !isToken(name) {
+	for name, values := range derived {
+		if !validHeader(name, values) {
 			return nil, fail(InvalidRequest)
-		}
-		for _, v := range values {
-			if strings.ContainsAny(v, "\r\n\x00") {
-				return nil, fail(InvalidRequest)
-			}
 		}
 		if strippedHeader(strings.ToLower(name)) {
 			continue
 		}
+		for _, v := range values {
+			out.Add(name, v)
+		}
+	}
+	for name, values := range explicit {
+		if !validHeader(name, values) || ExplicitForbidden(name) {
+			return nil, fail(InvalidRequest)
+		}
+		out.Del(name)
 		for _, v := range values {
 			out.Add(name, v)
 		}

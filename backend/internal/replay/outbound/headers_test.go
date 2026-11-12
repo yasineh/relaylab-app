@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"context"
 	"net/http"
 	"slices"
 	"strings"
@@ -90,4 +91,48 @@ func TestHeaderInjectionRejected(t *testing.T) {
 	if hits != 0 {
 		t.Fatalf("%d requests were sent", hits)
 	}
+}
+
+func TestExplicitHeaders(t *testing.T) {
+	e := newEnv(t)
+	var got http.Header
+	hits := 0
+	_, port := e.server("example.com", func(_ http.ResponseWriter, r *http.Request) { got, hits = r.Header.Clone(), hits+1 })
+	e.build()
+	url := "https://example.com:" + port + "/"
+
+	// A user-added Authorization is sent; a derived one never is.
+	r := e.do2(url, http.Header{"Authorization": {"Bearer from-event"}, "X-Kept": {"a"}},
+		http.Header{"Authorization": {"Bearer from-user"}, "X-Kept": {"b"}, "Stripe-Signature": {"t=1"}})
+	expectResult(t, r, Succeeded)
+	if got.Get("Authorization") != "Bearer from-user" || !slices.Equal(got.Values("X-Kept"), []string{"b"}) ||
+		got.Get("Stripe-Signature") != "t=1" {
+		t.Fatalf("server saw %v", got)
+	}
+	if r := e.do2(url, http.Header{"Authorization": {"Bearer from-event"}}, nil); r.Category != Succeeded {
+		t.Fatal(r.Category)
+	} else if got.Get("Authorization") != "" {
+		t.Fatalf("derived Authorization forwarded: %q", got.Get("Authorization"))
+	}
+
+	sent := hits
+	for _, name := range []string{
+		"Cookie", "Set-Cookie", "Proxy-Authorization", "Host", "Connection", "Transfer-Encoding",
+		"Upgrade", "Forwarded", "X-Forwarded-For", "X-Real-Ip", "Content-Length", "Proxy-Connection",
+	} {
+		expectResult(t, e.do2(url, nil, http.Header{name: {"x"}}), InvalidRequest)
+	}
+	expectResult(t, e.do2(url, nil, http.Header{"Authorization": {"Bearer a\r\nX-Injected: 1"}}), InvalidRequest)
+	if hits != sent {
+		t.Fatal("a request with a forbidden explicit header was sent")
+	}
+	for name, want := range map[string]bool{"authorization": false, "Cookie": true, "X-Forwarded-Host": true, "X-Custom": false} {
+		if ExplicitForbidden(name) != want {
+			t.Errorf("ExplicitForbidden(%s) = %v", name, !want)
+		}
+	}
+}
+
+func (e *testEnv) do2(url string, derived, explicit http.Header) Result {
+	return e.client.Do(context.Background(), Request{Method: http.MethodPost, URL: url, Header: derived, Explicit: explicit})
 }

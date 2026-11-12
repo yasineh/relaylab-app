@@ -54,13 +54,21 @@ type Options struct {
 	acquireTimeout time.Duration
 }
 
-// Request is one user-directed request. Header is the caller's header set;
-// unsafe headers are stripped (see strippedHeader).
+// Request is one user-directed request.
+//
+// Header holds headers derived from elsewhere (for replay, the original
+// event's); unsafe ones are stripped silently (see strippedHeader).
+// Explicit holds headers the user typed in for this request. They may set
+// Authorization, but a forbidden name (Cookie, Proxy-Authorization, Host,
+// hop-by-hop, forwarding; see explicitForbidden) fails the request with
+// invalid_request instead of being dropped. Explicit headers replace Header
+// entries of the same name.
 type Request struct {
-	Method string
-	URL    string
-	Header http.Header
-	Body   []byte
+	Method   string
+	URL      string
+	Header   http.Header
+	Explicit http.Header
+	Body     []byte
 }
 
 // Result is the outcome of one guarded request. For Succeeded, Status and the
@@ -198,7 +206,7 @@ func (c *Client) do(ctx context.Context, req Request) (Result, string) {
 	if dest.target.isIP() {
 		host = dest.target.ip.String()
 	}
-	header, herr := c.outboundHeader(req.Header)
+	header, herr := c.outboundHeader(req.Header, req.Explicit)
 	if herr != nil {
 		return failed(herr), host
 	}

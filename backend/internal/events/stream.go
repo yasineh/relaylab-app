@@ -59,7 +59,9 @@ type SessionValidator interface {
 type StreamOptions struct {
 	Broker *realtime.Broker
 	// Slots caps concurrent streams per user (LIMIT_STREAMS_PER_USER).
-	Slots     *realtime.Slots
+	Slots *realtime.Slots
+	// Metrics may be nil.
+	Metrics   *realtime.Metrics
 	Validator SessionValidator
 	// RevalidateEvery is how often the session and project are re-checked.
 	RevalidateEvery time.Duration
@@ -156,6 +158,8 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 	// here on can be missed.
 	sub := o.Broker.Subscribe(projectID)
 	defer sub.Close()
+	o.Metrics.Opened()
+	defer o.Metrics.Closed()
 
 	rc := http.NewResponseController(w)
 	// The server's write timeout suits short requests; a stream instead sets
@@ -308,7 +312,7 @@ func (h *Handler) backfill(ctx context.Context, out *sseWriter, seen *seenSet, o
 		return errTooManyMissed
 	}
 	seen.add(last) // the client has it
-	return sendSummaries(out, seen, items)
+	return sendSummaries(out, seen, h.streamOpts.Metrics, true, items)
 }
 
 // drain collects first plus whatever else is already buffered, up to liveBatchMax.
@@ -340,10 +344,10 @@ func (h *Handler) sendLive(ctx context.Context, out *sseWriter, seen *seenSet, o
 	if err != nil {
 		return err
 	}
-	return sendSummaries(out, seen, items)
+	return sendSummaries(out, seen, h.streamOpts.Metrics, false, items)
 }
 
-func sendSummaries(out *sseWriter, seen *seenSet, items []Summary) error {
+func sendSummaries(out *sseWriter, seen *seenSet, m *realtime.Metrics, backfill bool, items []Summary) error {
 	for _, s := range items {
 		if seen.has(s.ID) {
 			continue
@@ -352,6 +356,7 @@ func sendSummaries(out *sseWriter, seen *seenSet, items []Summary) error {
 			return err
 		}
 		seen.add(s.ID)
+		m.Sent(backfill)
 	}
 	return nil
 }

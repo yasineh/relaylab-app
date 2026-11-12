@@ -146,7 +146,8 @@ func runServer() int {
 		logger.Error("event listener setup failed", slog.String("error", err.Error()))
 		return 1
 	}
-	broker := realtime.NewBroker(realtime.Options{Source: listener, Logger: logger})
+	streamMetrics := realtime.NewMetrics(registry)
+	broker := realtime.NewBroker(realtime.Options{Source: listener, Logger: logger, OnSlowDrop: streamMetrics.SlowDrop})
 	go broker.Run(ctx)
 	validator := identity.NewValidator(authCfg, store.New(pool))
 	streamsDone := make(chan struct{})
@@ -170,6 +171,7 @@ func runServer() int {
 			WithStream(events.StreamOptions{
 				Broker:          broker,
 				Slots:           realtime.NewSlots(cfg.Limits.StreamsPerUser),
+				Metrics:         streamMetrics,
 				Validator:       validator,
 				RevalidateEvery: cfg.StreamRevalidate,
 				Shutdown:        streamsDone,

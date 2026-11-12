@@ -40,6 +40,8 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 - [Brand and design system](docs/design/design-system.md)
 - [API reference](docs/api.md)
 - [Authentication and sessions](docs/security/authentication.md)
+- [Received events](docs/security/events.md)
+- [Outbound requests and SSRF protections](docs/security/outbound-replay.md)
 - [MVP plan and decisions](docs/plan/mvp-plan.md)
 - [Specifications](openspec/): planned changes live in `openspec/changes/`
 

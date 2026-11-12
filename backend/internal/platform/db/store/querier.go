@@ -24,6 +24,9 @@ type Querier interface {
 	GetEndpoint(ctx context.Context, arg GetEndpointParams) (GetEndpointRow, error)
 	// Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
 	GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error)
+	// The parsed body_json copy is not returned: clients parse the exact body text,
+	// which keeps key order and duplicates. source_ip_prefix is returned as text
+	// ("203.0.113.0/24", or "" when none).
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]byte, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"relaylab/internal/endpoints"
+	"relaylab/internal/events"
 	"relaylab/internal/identity"
 	"relaylab/internal/identity/authtest"
 	"relaylab/internal/platform/config"
@@ -22,6 +23,7 @@ import (
 	"relaylab/internal/platform/db/dbtest"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
+	"relaylab/internal/platform/redact"
 	"relaylab/internal/projects"
 )
 
@@ -82,6 +84,7 @@ func newContractEnv(t *testing.T, authEnv ...string) *contractEnv {
 		}),
 		projects:  projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
 		endpoints: endpoints.NewHandler(endpoints.NewService(pool, nil, "", 25)), // not exercised here
+		events:    events.NewHandler(events.NewService(pool, redact.New(nil, nil)), 50, 100),
 	}))
 	t.Cleanup(api.Close)
 

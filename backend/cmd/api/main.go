@@ -23,6 +23,7 @@ import (
 
 	"relaylab/internal/endpoints"
 	"relaylab/internal/endpoints/token"
+	"relaylab/internal/events"
 	"relaylab/internal/identity"
 	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
@@ -119,10 +120,13 @@ func runServer() int {
 
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	// Ingestion removes sensitive values and the explorer marks them; both use
+	// the same rules so markers match what was removed.
+	redactor := redact.New(ingestCfg.RedactExtraHeaders, ingestCfg.RedactExtraParams)
 	ingestHandler := ingestion.NewHandler(ingestion.Options{
 		Store:             ingestion.NewPGStore(pool),
 		Hasher:            tokenKeys,
-		Redactor:          redact.New(ingestCfg.RedactExtraHeaders, ingestCfg.RedactExtraParams),
+		Redactor:          redactor,
 		Metrics:           ingestion.NewMetrics(registry),
 		MaxBodyBytes:      cfg.Limits.IngestMaxBodyBytes,
 		MaxHeaderFields:   cfg.Limits.IngestMaxHeaderFields,
@@ -149,6 +153,7 @@ func runServer() int {
 		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
 		endpoints: endpoints.NewHandler(endpoints.NewService(pool, tokenKeys,
 			endpointCfg.IngestBaseURL.String(), cfg.Limits.EndpointsPerProject)),
+		events:    events.NewHandler(events.NewService(pool, redactor), cfg.Limits.PageDefault, cfg.Limits.PageMax),
 		ingestion: ingestHandler,
 		web:       webHandler(),
 	})

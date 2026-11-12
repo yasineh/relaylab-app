@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"relaylab/internal/endpoints"
+	"relaylab/internal/events"
 	"relaylab/internal/identity"
 	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
@@ -25,6 +26,7 @@ type routerDeps struct {
 	authProxy http.Handler // /api/auth/* to the Better Auth service
 	projects  *projects.Handler
 	endpoints *endpoints.Handler
+	events    *events.Handler
 	ingestion *ingestion.Handler // public /h/{token}; never reads the session
 	web       http.Handler       // embedded SPA; nil when not built
 }
@@ -77,6 +79,7 @@ func newRouter(d routerDeps) http.Handler {
 			v1.Route("/projects", func(pr chi.Router) {
 				d.projects.Routes(pr)
 				pr.Route("/{projectId}/endpoints", d.endpoints.Routes)
+				pr.Route("/{projectId}/events", d.events.Routes)
 			})
 		})
 	})

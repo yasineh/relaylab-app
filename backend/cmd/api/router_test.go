@@ -20,11 +20,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"relaylab/internal/endpoints"
+	"relaylab/internal/events"
 	"relaylab/internal/identity"
 	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/health"
+	"relaylab/internal/platform/redact"
 	"relaylab/internal/projects"
 	"relaylab/internal/webui"
 )
@@ -111,6 +113,7 @@ func testRouterWith(t *testing.T, o routerOpts) http.Handler {
 		}),
 		projects:  projects.NewHandler(projects.NewService(nil, 20)), // not called by these tests
 		endpoints: endpoints.NewHandler(endpoints.NewService(nil, nil, "", 25)),
+		events:    events.NewHandler(events.NewService(nil, redact.New(nil, nil)), 50, 100),
 		ingestion: o.ingestion,
 		web:       o.web,
 	})

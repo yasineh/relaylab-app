@@ -15,8 +15,8 @@ import (
 const getEvent = `-- name: GetEvent :one
 SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
        e.raw_query, e.query_params, e.headers, e.redacted_header_count, e.content_type,
-       e.body, e.body_size, e.body_encoding, e.body_json, e.json_invalid,
-       e.source_ip_prefix, e.user_agent, e.correlation_id
+       e.body, e.body_size, e.body_encoding, (e.body_json IS NOT NULL)::boolean AS is_json, e.json_invalid,
+       COALESCE(e.source_ip_prefix::text, '')::text AS source_ip_prefix, e.user_agent, e.correlation_id
 FROM app.webhook_events e
 JOIN app.projects p ON p.id = e.project_id
 JOIN app.endpoints en ON en.id = e.endpoint_id
@@ -44,13 +44,16 @@ type GetEventRow struct {
 	Body                []byte
 	BodySize            int32
 	BodyEncoding        string
-	BodyJson            []byte
+	IsJson              bool
 	JsonInvalid         bool
-	SourceIpPrefix      *netip.Addr
+	SourceIpPrefix      string
 	UserAgent           pgtype.Text
 	CorrelationID       string
 }
 
+// The parsed body_json copy is not returned: clients parse the exact body text,
+// which keeps key order and duplicates. source_ip_prefix is returned as text
+// ("203.0.113.0/24", or "" when none).
 func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error) {
 	row := q.db.QueryRow(ctx, getEvent, arg.ID, arg.ProjectID, arg.OwnerID)
 	var i GetEventRow
@@ -69,7 +72,7 @@ func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow
 		&i.Body,
 		&i.BodySize,
 		&i.BodyEncoding,
-		&i.BodyJson,
+		&i.IsJson,
 		&i.JsonInvalid,
 		&i.SourceIpPrefix,
 		&i.UserAgent,

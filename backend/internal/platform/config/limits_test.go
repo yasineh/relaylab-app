@@ -116,6 +116,8 @@ var unrelatedConstants = map[string]map[string]bool{
 	filepath.Join("internal", "endpoints", "service.go"): {"NameMaxChars": true},
 	// Histogram bucket bounds in seconds; the 10 s top bound is not a timeout.
 	filepath.Join("internal", "ingestion", "metrics.go"): {"durationBuckets": true},
+	// Content type filter length, not a page size.
+	filepath.Join("internal", "events", "service.go"): {"contentTypeFilterMaxChars": true},
 }
 
 // TestNoScatteredLimitLiterals fails if a known limit default is hard-coded in

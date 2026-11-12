@@ -61,3 +61,18 @@ func TestOutboundRejectsBadValues(t *testing.T) {
 		}
 	}
 }
+
+func TestOutboundHTTPRefusedInProduction(t *testing.T) {
+	prod := map[string]string{"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com"}
+	if _, err := loadOutbound(t, prod); err != nil {
+		t.Fatalf("production without the flag: %v", err)
+	}
+	prod["OUTBOUND_ALLOW_HTTP"] = "true"
+	_, err := loadOutbound(t, prod)
+	assertFieldError(t, err, "OUTBOUND_ALLOW_HTTP")
+
+	dev, err := loadOutbound(t, map[string]string{"OUTBOUND_ALLOW_HTTP": "true"})
+	if err != nil || !dev.AllowHTTP || !slices.Contains(dev.AllowedPorts, 80) {
+		t.Fatalf("development with the flag: %+v %v", dev, err)
+	}
+}

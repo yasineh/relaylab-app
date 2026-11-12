@@ -11,7 +11,7 @@ flowchart LR
   subgraph dev["Local development (Docker Compose)"]
     vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
     subgraph image["relaylab image (distroless, nonroot)"]
-      api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build"]
+      api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/api/v1/projects/{id}/events/stream (SSE, session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build<br/>realtime broker: one LISTEN connection per instance"]
       worker["worker<br/>/healthz, /readyz on :8081<br/>(no jobs yet)"]
       migrate["api migrate<br/>(one-shot, goose)"]
     end
@@ -24,6 +24,9 @@ flowchart LR
   end
 
   sender -->|"POST /h/{token}: credential values redacted,<br/>stored before the ack"| api
+  api -->|"after commit: pg_notify('events', ids only)"| pg
+  pg -.->|"LISTEN events → broker → streams of that project"| api
+  api -.->|"SSE: event summaries, owner-checked,<br/>session re-checked every ≤60 s"| browser
   browser -->|"HTTP, same origin, session cookie"| vite
   vite -->|"proxy"| api
   browser -.->|"production layout: api serves the SPA"| api
@@ -75,8 +78,14 @@ fall back to the web app when it is embedded.
 - **Event explorer**: `/api/v1/projects/{id}/events` reads events only for the
   session user's projects, and the web app renders all received content as
   inert text. Details: [Received events](../security/events.md).
-- **Not yet present**: live updates and outbound replay. Their boundaries are
-  added to this diagram by the changes that implement them.
+- **Live updates**: `/api/v1/projects/{id}/events/stream` requires the same
+  session and ownership as the REST routes, re-validates both at least every
+  60 s and at session expiry, and is capped per user. Database notifications
+  carry ids only. Each stream loads summaries with an owner-scoped query, and
+  summaries never include bodies, headers, or query values. Details:
+  [API reference](../api.md#get-apiv1projectsprojectideventsstream).
+- **Not yet present**: outbound replay. Its boundary is added to this diagram
+  by the change that implements it.
 
 In production (prepared by `add-production-readiness`), the auth service runs
 as a sidecar in the same Cloud Run service as the API, so `AUTH_SERVICE_URL`

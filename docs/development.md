@@ -128,7 +128,8 @@ deployment environment, never a file.
 | `MIGRATION_DATABASE_URL` | — | Migrator connection as `app_migrator`; read only by `migrate` |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `TRUSTED_PROXY_CIDRS` | empty | CIDRs whose `X-Forwarded-For` is trusted. Empty trusts none |
-| `SHUTDOWN_GRACE` | `20s` | Time allowed for in-flight work on SIGTERM |
+| `SHUTDOWN_GRACE` | `20s` | Time allowed for in-flight work on SIGTERM. Open live event streams are closed at once so they don't hold it up |
+| `STREAM_REVALIDATE_INTERVAL` | `60s` | How often a live event stream re-checks its session and project; 1s to 60s |
 
 Authentication and mail ([details](security/authentication.md)):
 
@@ -161,6 +162,7 @@ value is hard-coded anywhere else.
 | `LIMIT_API_MAX_BODY_BYTES` | 65536 | Larger `/api` bodies get `413 body_too_large` |
 | `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` | 10 | Proxied `/api/auth` requests that take longer get `504 auth_timeout` |
 | `LIMIT_PROJECTS_PER_USER` | 20 | Creating more projects gets `409 project_limit_reached` |
+| `LIMIT_STREAMS_PER_USER` | 5 | Opening more live event streams on one API instance gets `429 too_many_streams` |
 
 ## Database: schemas, roles, migrations
 

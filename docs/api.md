@@ -13,7 +13,7 @@ from clients that are not browsers.
 - **Authentication**: the session cookie set by `/api/auth`. See [Authentication and sessions](security/authentication.md).
 - **CSRF**: `POST`, `PUT`, `PATCH`, and `DELETE` on `/api/v1` require `Origin: <APP_ORIGIN>`. When the browser sends no `Origin`, `Sec-Fetch-Site: same-origin` is required instead.
 - **Request IDs**: every response has `X-Request-ID`. A safe inbound value (1–64 characters of `[A-Za-z0-9._-]`) is reused.
-- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20); `LIMIT_ENDPOINTS_PER_PROJECT` endpoints per project (25); list pages of `LIMIT_PAGE_DEFAULT` items (50) and at most `LIMIT_PAGE_MAX` (100).
+- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20); `LIMIT_ENDPOINTS_PER_PROJECT` endpoints per project (25); list pages of `LIMIT_PAGE_DEFAULT` items (50) and at most `LIMIT_PAGE_MAX` (100); `LIMIT_STREAMS_PER_USER` open live event streams per user, per API instance (5).
 
 ### Error envelope
 
@@ -38,6 +38,7 @@ SQL, file paths, or configuration values.
 | 409 | `project_limit_reached` | Creating a project beyond `LIMIT_PROJECTS_PER_USER` |
 | 409 | `endpoint_limit_reached` | Creating an endpoint beyond `LIMIT_ENDPOINTS_PER_PROJECT` |
 | 415 | `unsupported_media_type` | Body is not `application/json` |
+| 429 | `too_many_streams` | Opening a live event stream beyond `LIMIT_STREAMS_PER_USER` |
 | 422 | `validation_failed` | A field is invalid; `error.fields` maps each field to a message |
 | 431 | `headers_too_large` | Headers over the limit |
 | 500 | `internal_error` | Unexpected failure (details only in server logs) |
@@ -294,6 +295,69 @@ The exact body bytes as a download: `Content-Type: application/octet-stream`,
 `Content-Disposition: attachment; filename="event-{id}.bin"`,
 `X-Content-Type-Options: nosniff`, and `Content-Security-Policy: sandbox`, so
 a browser never renders it, even when the sender declared `text/html`.
+
+#### `GET /api/v1/projects/{projectId}/events/stream`
+
+New events of the project as they are received, as
+[Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html)
+(`Content-Type: text/event-stream`, `Cache-Control: no-store`,
+`X-Accel-Buffering: no`). The web app opens it with `EventSource`.
+
+Before the stream opens, the usual checks apply and answer with the error
+envelope: `401 unauthenticated` or `401 session_expired`, `404 not_found` for a
+project that is not the caller's, and `429 too_many_streams` when the user
+already has `LIMIT_STREAMS_PER_USER` streams open on this API instance. A slot is
+freed as soon as a stream closes.
+
+Messages:
+
+```text
+retry: 3000
+
+id: 019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b
+event: event.created
+data: {"id":"019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b","endpoint_id":"019a6b1d-0000-7000-8000-000000000001","endpoint_name":"Stripe staging","method":"POST","path":"/orders","content_type":"application/json","body_size":20,"received_at":"2026-11-09T11:36:12.481Z"}
+
+: ping
+
+event: resync.required
+data: {"reason":"too_many_missed"}
+```
+
+| Message | Meaning |
+|---|---|
+| `retry: 3000` | Sent first. The reconnect delay for clients that use EventSource's built-in retry |
+| `event.created` | One new event. `id` is the event id; `data` is the same summary as a list item, on one line. It never contains the body, headers, or query |
+| `: ping` | A comment every 20 seconds, so proxies keep idle streams open |
+| `resync.required` | The stream ends and the client should reload its list, then open a new stream without a resume point. `reason` is `too_many_missed`, `slow_client` (the client fell more than 256 events behind), `listener_restart` (the server's database listener reconnected, so notifications may have been lost), or `project_not_found` (the project was deleted) |
+| `session.expired` | The session expired, was signed out, or was revoked. The stream ends; sign in again |
+
+Received content can't break the framing. `data` is JSON on a single line, so
+newlines and other control characters in paths or names are escaped.
+
+**Resume.** To continue after a disconnect, reconnect with the last received
+id in the `Last-Event-ID` header (EventSource does this itself) or the
+`last_event_id` query parameter; the header wins when both are present. The
+server first replays the project's events received after that id, oldest
+first, then continues live. It also re-reads events received up to 5 seconds
+before that id, because an event can commit slightly after one received later.
+Clients should ignore ids they already have. One connection never sends the
+same event twice. If more than 500 events would be replayed, the server sends
+`resync.required` instead. An id that is malformed, unknown, or belongs to
+another project is ignored: no replay, live events only.
+
+**Lifetime.** The server re-checks the session and project ownership at least
+every `STREAM_REVALIDATE_INTERVAL` (default and maximum 60 s), and also when
+the session's expiry time is reached. A session that Better Auth extended in
+the meantime keeps the stream open. Streams also end when the API instance
+shuts down; clients reconnect and resume. Any hosting proxy must allow
+long-lived responses: on Cloud Run, set the request timeout to 3600 s (the
+maximum). Streams are closed at that point and clients resume transparently.
+
+```sh
+curl -N "$APP_ORIGIN/api/v1/projects/$PROJECT_ID/events/stream" -b "$SESSION_COOKIE" \
+  -H "Last-Event-ID: 019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b"
+```
 
 ## Webhook ingestion (`/h/*`)
 

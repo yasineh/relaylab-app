@@ -30,6 +30,12 @@ event explorer. API details are in the [API reference](../api.md#events).
 - Page cursors are not signed. They are opaque, and the query that uses one is
   still limited to the caller's projects, so an edited or foreign cursor can
   only move within events the caller may already read.
+- The live event stream follows the same rules. It opens only for the
+  project's owner, re-checks the session and ownership at least every minute
+  (and at session expiry), and closes when either is gone. It sends only list
+  summaries (method, path, endpoint name, content type, size, time), never
+  bodies, headers, or query values. Received text is JSON-encoded on one line,
+  so it can't inject stream messages.
 - Public ingestion (`/h/{token}`) can only add events. It cannot read, list, or
   change them.
 

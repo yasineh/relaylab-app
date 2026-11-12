@@ -266,3 +266,102 @@ func TestWebhookEventConstraints(t *testing.T) {
 		t.Fatalf("events left after endpoint delete: %d", n)
 	}
 }
+
+func TestReplayConstraints(t *testing.T) {
+	d := dbtest.New(t)
+	authtest.Prepare(t, d)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, config.NewSecret(d.MigratorURL), quiet); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := pgx.Connect(ctx, d.AdminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = admin.Close(ctx) }()
+	app, err := pgx.Connect(ctx, d.RuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = app.Close(ctx) }()
+	if _, err := admin.Exec(ctx, `INSERT INTO auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+		VALUES ('u1', 'U', 'u1@example.test', true, now(), now())`); err != nil {
+		t.Fatal(err)
+	}
+	one := func(sql string, args ...any) string {
+		t.Helper()
+		var id string
+		if err := app.QueryRow(ctx, sql, args...).Scan(&id); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+		return id
+	}
+	project := func() string {
+		return one(`INSERT INTO app.projects (id, owner_id, name) VALUES (gen_random_uuid(), 'u1', 'p') RETURNING id::text`)
+	}
+	endpoint := func(p string) string {
+		return one(`INSERT INTO app.endpoints (id, project_id, name, token_hash, token_ciphertext)
+			VALUES (gen_random_uuid(), $1, 'e', sha256(gen_random_uuid()::text::bytea), '\x00') RETURNING id::text`, p)
+	}
+	event := func(p, e string) string {
+		return one(`INSERT INTO app.webhook_events
+			(id, endpoint_id, project_id, received_at, method, path, query_params, headers, body, body_size, body_encoding, correlation_id)
+			VALUES (gen_random_uuid(), $1, $2, now(), 'POST', '', '{}', '[]', '\x', 0, 'utf8', 'r') RETURNING id::text`, e, p)
+	}
+	replay := func(p, ev, kind string, target, sink any) error {
+		_, err := app.Exec(ctx, `INSERT INTO app.replay_attempts (id, project_id, event_id, actor_user_id, destination_type, target_url, sink_endpoint_id, method)
+			VALUES (gen_random_uuid(), $1, $2, 'u1', $3, $4, $5, 'POST')`, p, ev, kind, target, sink)
+		return err
+	}
+	want := func(name string, err error, code string) {
+		t.Helper()
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != code {
+			t.Fatalf("%s: want SQLSTATE %s, got %v", name, code, err)
+		}
+	}
+
+	p1, p2 := project(), project()
+	e1, e2 := endpoint(p1), endpoint(p2)
+	sink := endpoint(p1)
+	ev1 := event(p1, e1)
+	if err := replay(p1, ev1, "url", "https://example.com/", nil); err != nil {
+		t.Fatalf("url replay rejected: %v", err)
+	}
+	if err := replay(p1, ev1, "sink", nil, sink); err != nil {
+		t.Fatalf("sink replay rejected: %v", err)
+	}
+	want("event of another project", replay(p2, ev1, "url", "https://example.com/", nil), "23503")
+	want("sink of another project", replay(p1, ev1, "sink", nil, e2), "23503")
+	want("url without target", replay(p1, ev1, "url", nil, nil), "23514")
+	want("sink with target", replay(p1, ev1, "sink", "https://example.com/", sink), "23514")
+	_, err = app.Exec(ctx, `UPDATE app.replay_attempts SET state = 'succeeded', outcome = 'succeeded', header_overrides_ciphertext = '\x01'`)
+	want("terminal with ciphertext", err, "23514")
+	_, err = app.Exec(ctx, `UPDATE app.replay_attempts SET state = 'failed'`)
+	want("terminal without outcome", err, "23514")
+	_, err = app.Exec(ctx, `INSERT INTO app.jobs (id, kind, project_id, state, max_attempts) VALUES (gen_random_uuid(), 'replay.deliver', $1, 'running', 3)`, p1)
+	want("running job without lease", err, "23514")
+
+	// Deleting the sink endpoint keeps the replay and its project.
+	if _, err := app.Exec(ctx, `DELETE FROM app.endpoints WHERE id = $1`, sink); err != nil {
+		t.Fatal(err)
+	}
+	var kept int
+	if err := app.QueryRow(ctx, `SELECT count(*) FROM app.replay_attempts WHERE destination_type = 'sink' AND project_id = $1 AND sink_endpoint_id IS NULL`, p1).Scan(&kept); err != nil || kept != 1 {
+		t.Fatalf("sink replay after endpoint deletion: %d %v", kept, err)
+	}
+
+	// Deleting the project removes its replays and jobs, including running ones.
+	if _, err := app.Exec(ctx, `INSERT INTO app.jobs (id, kind, project_id, state, max_attempts, lease_owner, lease_expires_at)
+		VALUES (gen_random_uuid(), 'replay.deliver', $1, 'running', 3, 'w1', now() + interval '1 minute'),
+		       (gen_random_uuid(), 'replay.deliver', $1, 'queued', 3, NULL, NULL)`, p1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.Exec(ctx, `DELETE FROM app.projects WHERE id = $1`, p1); err != nil {
+		t.Fatal(err)
+	}
+	var left int
+	if err := app.QueryRow(ctx, `SELECT (SELECT count(*) FROM app.jobs) + (SELECT count(*) FROM app.replay_attempts)`).Scan(&left); err != nil || left != 0 {
+		t.Fatalf("rows left after project deletion: %d %v", left, err)
+	}
+}

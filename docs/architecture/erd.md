@@ -284,7 +284,7 @@ or restore.
 - **Webhook events**: kept until their endpoint or project is deleted (by cascade). An age-based retention purge is planned in `add-event-retention`; until then events have no automatic expiry. Credential header and query values are never stored.
 - **Audit log**: kept with its project and deleted with it. If the actor's account is deleted, `actor_user_id` becomes `NULL` (in practice the actor's projects, and so these rows, are deleted too).
 
-- **Accounts**: kept until the user deletes their account (Account settings → Delete account), which removes the `user` row and, by cascade, its sessions and credentials. Later changes cascade the user's projects and data too.
+- **Accounts**: kept until the user deletes their account (Account settings → Delete account), which removes the `user` row and, by cascade, its sessions, credentials, and projects (with their endpoints, events, and audit entries).
 - **Sessions**: deleted on sign-out, sign-out everywhere, password change (other sessions), password reset (all sessions), and account deletion. Expired rows are rejected immediately but remain in the table until Better Auth removes them.
 - **Verification and reset tokens**: single use; they expire after 24 hours and 1 hour respectively.
 - **Rate-limit counters**: the only place a full IP address is stored (webhook events keep only a truncated prefix). Pruning old rows (by the auth service, which owns the schema) is planned in `add-event-retention`.

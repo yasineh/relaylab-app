@@ -6,11 +6,12 @@ target architecture and decisions are in [`docs/plan/mvp-plan.md`](../plan/mvp-p
 ```mermaid
 flowchart LR
   browser["Browser<br/>(RelayLab SPA)"]
+  sender["Webhook sender<br/>(provider or curl, untrusted)"]
 
   subgraph dev["Local development (Docker Compose)"]
     vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
     subgraph image["relaylab image (distroless, nonroot)"]
-      api["api<br/>/healthz, /readyz<br/>/api/v1/me, /api/v1/projects (session required)<br/>/api/auth/* proxy<br/>embedded web build"]
+      api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build"]
       worker["worker<br/>/healthz, /readyz on :8081<br/>(no jobs yet)"]
       migrate["api migrate<br/>(one-shot, goose)"]
     end
@@ -18,10 +19,11 @@ flowchart LR
       auth["auth: Better Auth 1.7.18<br/>:3001, internal network only"]
       authmigrate["auth migrate<br/>(one-shot, runs first)"]
     end
-    pg[("PostgreSQL 17<br/>schema app: projects, goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
+    pg[("PostgreSQL 17<br/>schema app: projects, endpoints, webhook_events,<br/>audit_log, goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
     mailpit["Mailpit<br/>SMTP :1025, inbox :8025"]
   end
 
+  sender -->|"POST /h/{token}: credential values redacted,<br/>stored before the ack"| api
   browser -->|"HTTP, same origin, session cookie"| vite
   vite -->|"proxy"| api
   browser -.->|"production layout: api serves the SPA"| api
@@ -66,8 +68,15 @@ fall back to the web app when it is embedded.
   `app_migrator` and `auth_migrator`.
 - **Configuration**: secrets are typed so they cannot be printed by logs or
   error messages. The worker does not receive the session secret.
-- **Not yet present**: public webhook ingestion and outbound replay. Their
-  boundaries are added to this diagram by the changes that implement them.
+- **Public ingestion**: `/h/{token}` accepts untrusted requests without a
+  session. The unguessable token is the only credential. Ingestion never reads
+  the session cookie, can only insert events, and removes credential values
+  before storing them. Details: [API reference](../api.md#webhook-ingestion-h).
+- **Event explorer**: `/api/v1/projects/{id}/events` reads events only for the
+  session user's projects, and the web app renders all received content as
+  inert text. Details: [Received events](../security/events.md).
+- **Not yet present**: live updates and outbound replay. Their boundaries are
+  added to this diagram by the changes that implement them.
 
 In production (prepared by `add-production-readiness`), the auth service runs
 as a sidecar in the same Cloud Run service as the API, so `AUTH_SERVICE_URL`

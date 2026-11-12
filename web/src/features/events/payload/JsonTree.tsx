@@ -3,12 +3,13 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
+import { VisibleText } from '@/features/events/payload/RawText'
 import {
-  allContainerPaths,
   DEFAULT_OPEN_DEPTH,
   STRING_PREVIEW_CHARS,
   visibleRows,
   type Json,
+  type OpenMode,
   type Row,
 } from '@/features/events/payload/json-rows'
 
@@ -26,28 +27,29 @@ const INITIAL_RECT = { width: 800, height: 600 }
  */
 export function JsonTree({ value, label = 'JSON body' }: { value: Json; label?: string }) {
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(() => new Map())
+  const [mode, setMode] = useState<OpenMode>('depth')
   const [openStrings, setOpenStrings] = useState<ReadonlySet<string>>(() => new Set())
-  const rows = useMemo(() => visibleRows(value, overrides), [value, overrides])
+  const rows = useMemo(() => visibleRows(value, overrides, mode), [value, overrides, mode])
 
   const toggle = (path: string, expanded: boolean) => setOverrides((m) => new Map(m).set(path, !expanded))
   const showString = (path: string) => setOpenStrings((s) => new Set(s).add(path))
 
-  const setAll = (expanded: boolean) => {
-    const m = new Map<string, boolean>()
-    for (const p of allContainerPaths(value)) m.set(p, expanded)
-    setOverrides(m)
+  // Switching mode clears individual toggles, so every container follows it.
+  const setAll = (next: OpenMode) => {
+    setMode(next)
+    setOverrides(new Map())
   }
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => setAll(true)}>
+        <Button variant="outline" size="sm" onClick={() => setAll('all')}>
           Expand all
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setAll(false)}>
+        <Button variant="outline" size="sm" onClick={() => setAll('none')}>
           Collapse all
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => setOverrides(new Map())}>
+        <Button variant="ghost" size="sm" onClick={() => setAll('depth')}>
           Reset to depth {DEFAULT_OPEN_DEPTH}
         </Button>
       </div>
@@ -178,7 +180,9 @@ function Key({ label }: { label: string | null }) {
   if (label === null) return null
   return (
     <>
-      <span className="text-sky-700 dark:text-sky-300">{JSON.stringify(label)}</span>
+      <span className="text-sky-700 dark:text-sky-300">
+        <VisibleText text={JSON.stringify(label)} />
+      </span>
       <span className="text-muted-foreground">: </span>
     </>
   )
@@ -199,12 +203,18 @@ function Primitive({
   // JSON.stringify shows the value exactly as JSON, escapes included.
   const full = JSON.stringify(value)
   if (expanded || full.length <= STRING_PREVIEW_CHARS) {
-    return <span className="text-emerald-700 dark:text-emerald-300">{full}</span>
+    return (
+      <span className="text-emerald-700 dark:text-emerald-300">
+        <VisibleText text={full} />
+      </span>
+    )
   }
   const hidden = full.length - STRING_PREVIEW_CHARS
   return (
     <span>
-      <span className="text-emerald-700 dark:text-emerald-300">{full.slice(0, STRING_PREVIEW_CHARS)}…</span>{' '}
+      <span className="text-emerald-700 dark:text-emerald-300">
+        <VisibleText text={full.slice(0, STRING_PREVIEW_CHARS)} />…
+      </span>{' '}
       <button
         type="button"
         onClick={onShowMore}

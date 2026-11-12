@@ -11,6 +11,19 @@ export function RawText({ text, label = 'Raw body' }: { text: string; label?: st
       aria-label={label}
       className="max-h-[70vh] overflow-auto rounded-md border bg-muted/30 p-3 font-mono text-sm break-all whitespace-pre-wrap"
     >
+      <VisibleText text={text} />
+    </pre>
+  )
+}
+
+/**
+ * Text with control and bidirectional-override characters shown as
+ * highlighted escapes, so received text cannot display differently from what
+ * it contains. Used for every received string, in the raw view and the tree.
+ */
+export function VisibleText({ text }: { text: string }) {
+  return (
+    <>
       {visibleSegments(text).map((s, i) =>
         s.escape ? (
           <span
@@ -23,6 +36,6 @@ export function RawText({ text, label = 'Raw body' }: { text: string; label?: st
           s.text
         ),
       )}
-    </pre>
+    </>
   )
 }

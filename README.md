@@ -11,8 +11,10 @@ A developer workspace to receive, inspect, replay, and debug HTTP webhooks.
 > place: Go API and worker, PostgreSQL with migrations, health checks,
 > structured logging, and email/password accounts (sign-up, email verification,
 > sign-in, password reset, account settings) through a Better Auth service, and
-> user-owned projects. Endpoints, webhook ingestion, the event explorer, and
-> replay are planned and specified but **not implemented yet**. RelayLab is not deployed anywhere.
+> user-owned projects, webhook endpoints with secret receiving URLs, public
+> webhook ingestion, and the event explorer (filtered, paginated event list and
+> event detail with JSON, raw, and hex views). Live updates and replay are
+> planned and specified but **not implemented yet**. RelayLab is not deployed anywhere.
 
 ## Run it locally
 

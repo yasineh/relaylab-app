@@ -1,7 +1,6 @@
 # API reference
 
-The HTTP API that exists **today**. Later changes add viewing events and
-replay; each one documents its routes here when it ships.
+The HTTP API that exists **today**. Later changes add replay; each one documents its routes here when it ships.
 
 Everything is served from the application origin (`APP_ORIGIN`): the web app,
 the dashboard API under `/api/v1`, and authentication under `/api/auth`. The
@@ -14,7 +13,7 @@ from clients that are not browsers.
 - **Authentication**: the session cookie set by `/api/auth`. See [Authentication and sessions](security/authentication.md).
 - **CSRF**: `POST`, `PUT`, `PATCH`, and `DELETE` on `/api/v1` require `Origin: <APP_ORIGIN>`. When the browser sends no `Origin`, `Sec-Fetch-Site: same-origin` is required instead.
 - **Request IDs**: every response has `X-Request-ID`. A safe inbound value (1–64 characters of `[A-Za-z0-9._-]`) is reused.
-- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20); `LIMIT_ENDPOINTS_PER_PROJECT` endpoints per project (25).
+- **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20); `LIMIT_ENDPOINTS_PER_PROJECT` endpoints per project (25); list pages of `LIMIT_PAGE_DEFAULT` items (50) and at most `LIMIT_PAGE_MAX` (100).
 
 ### Error envelope
 
@@ -32,6 +31,7 @@ SQL, file paths, or configuration values.
 | 403 | `email_not_verified` | Email verification is required and the user has not verified |
 | 403 | `origin_rejected` | Unsafe method without a matching `Origin` or `Sec-Fetch-Site: same-origin` |
 | 400 | `invalid_json` | The body is not one JSON object, has unknown fields, or has trailing data |
+| 400 | `invalid_cursor` | A page cursor is malformed, or was issued for different filters or sort order |
 | 404 | `not_found` | Unknown path (on `/api/v1`, only after authentication succeeds), or a resource that is missing, owned by someone else, or has a malformed id. These cases are indistinguishable |
 | 405 | `method_not_allowed` | Known path, wrong method |
 | 413 | `body_too_large` | Body over the limit |
@@ -183,6 +183,117 @@ exceed it.
 `audit_log` entry with the actor, project, and endpoint id and name. Entries
 never contain the token or URL. Request logs record the route pattern
 (`/h/{token}`, or `unmatched`), never the raw path, so tokens do not reach logs.
+
+### Events
+
+Received webhooks of a project, read-only. Every route requires a session and
+only returns events of projects the caller owns. Another user's project or
+event, a project or event that does not exist, and a malformed id all give the
+same `404 not_found`. Responses are `Cache-Control: no-store`.
+
+#### `GET /api/v1/projects/{projectId}/events`
+
+One page of events, newest first unless `sort=asc`. Items never include the
+body, headers, or query.
+
+| Parameter | Value |
+|---|---|
+| `endpoint_id` | Only this endpoint's events. An endpoint of another project matches nothing |
+| `method` | One or more of `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, comma-separated or repeated; case-insensitive |
+| `received_after` | RFC 3339 time, inclusive |
+| `received_before` | RFC 3339 time, exclusive; must be later than `received_after` |
+| `content_type` | Case-insensitive prefix of the content type, at most 100 characters; `%` and `_` match literally |
+| `sort` | `desc` (default) or `asc` |
+| `limit` | 1 to `LIMIT_PAGE_MAX` (100); default `LIMIT_PAGE_DEFAULT` (50) |
+| `cursor` | The previous response's `next_cursor`, with the same filters and sort |
+
+Each parameter except `method` may be given once. Invalid values give
+`422 validation_failed` naming the parameter in `error.fields`. Unknown
+parameters are ignored.
+
+```sh
+curl "$APP_ORIGIN/api/v1/projects/$PROJECT_ID/events?method=POST&limit=2" -b "$SESSION_COOKIE"
+```
+
+```json
+{
+  "items": [
+    {
+      "id": "019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b",
+      "endpoint_id": "019a6b1d-0000-7000-8000-000000000001",
+      "endpoint_name": "Stripe staging",
+      "method": "POST",
+      "path": "/orders",
+      "content_type": "application/json",
+      "body_size": 20,
+      "received_at": "2026-11-09T11:36:12.481Z"
+    }
+  ],
+  "next_cursor": "eyJpZCI6IjAxYTFjZjQ3LTdlNTEtNzBjOS05NzMxLTY5OGRkOTcxNjBiYyIsImRpciI6ImRlc2MiLCJmIjoiMDdjYmNkYzVkNjRiMGNkMiJ9"
+}
+```
+
+`next_cursor` is `null` on the last page, and an owned project with no
+matching events returns `{"items":[],"next_cursor":null}`. Pages are keyed by
+event id, not offset, so events arriving while you page cause no duplicates or
+gaps in the range you are reading: newer events appear when you start from the
+first page again. Cursors are opaque and are not secrets. One can only position
+a query inside the projects the caller already owns, and using it with
+different filters or sort gives `400 invalid_cursor`.
+
+#### `GET /api/v1/projects/{projectId}/events/{eventId}`
+
+The full event. Query parameters, including `reveal`, are ignored: original
+credential values are not stored, so there is nothing to reveal.
+
+```json
+{
+  "id": "019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b",
+  "endpoint_id": "019a6b1d-0000-7000-8000-000000000001",
+  "endpoint_name": "Stripe staging",
+  "method": "POST",
+  "path": "/orders",
+  "content_type": "application/json",
+  "body_size": 20,
+  "received_at": "2026-11-09T11:36:12.481Z",
+  "raw_query": "token=%5BREDACTED%5D&page=2",
+  "query": [
+    { "name": "page", "value": "2", "redacted": false },
+    { "name": "token", "value": "[REDACTED]", "redacted": true }
+  ],
+  "headers": [
+    { "name": "Authorization", "value": "[REDACTED]", "redacted": true },
+    { "name": "Content-Type", "value": "application/json", "redacted": false }
+  ],
+  "redacted_count": 2,
+  "body": { "encoding": "utf8", "text": "{\"hello\":\"relaylab\"}", "is_json": true, "json_invalid": false, "size": 20 },
+  "source_ip_prefix": "203.0.113.0/24",
+  "user_agent": "curl/8.7.1",
+  "correlation_id": "98cd9eb0-2f07-4c93-8f28-4513d9576552"
+}
+```
+
+- `headers` keep their stored order (sorted by name; repeated headers in
+  arrival order). `query` is sorted by name, each name's values in arrival
+  order; `raw_query` is exactly as received (after redaction).
+- `redacted: true` means the value was removed when the request arrived. It is
+  set only when the stored value is `[REDACTED]` **and** the name matches a
+  redaction rule, so a sender that literally sent `[REDACTED]` in an ordinary
+  header is not mislabelled.
+- `redacted_count` is the number of header values removed at receipt plus the
+  query values marked as removed.
+- `body.encoding` is `utf8` (the body is in `text`) or `binary` (base64 in
+  `base64`). `is_json` means the body is valid JSON with a JSON content type;
+  `json_invalid` means a JSON content type with an invalid body. Clients parse
+  `text` themselves, which keeps key order and duplicate keys exactly as sent.
+- `source_ip_prefix` and `user_agent` are `null` when unknown.
+
+#### `GET /api/v1/projects/{projectId}/events/{eventId}/body`
+
+The exact body bytes as a download: `Content-Type: application/octet-stream`,
+`Content-Disposition: attachment; filename="event-{id}.bin"`,
+`X-Content-Type-Options: nosniff`, and `Content-Security-Policy: sandbox`, so
+a browser never renders it, even when the sender declared `text/html`.
 
 ## Webhook ingestion (`/h/*`)
 

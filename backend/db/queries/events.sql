@@ -102,11 +102,13 @@ LIMIT sqlc.arg(row_limit);
 -- name: GetEvent :one
 -- The parsed body_json copy is not returned: clients parse the exact body text,
 -- which keeps key order and duplicates. source_ip_prefix is returned as text
--- ("203.0.113.0/24", or "" when none).
+-- ("203.0.113.0/24", or "" when none). Ingestion stores the truncated network
+-- address without a mask (it reads as /32 or /128), so the /24 or /48 it was
+-- truncated to is applied here.
 SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
        e.raw_query, e.query_params, e.headers, e.redacted_header_count, e.content_type,
        e.body, e.body_size, e.body_encoding, (e.body_json IS NOT NULL)::boolean AS is_json, e.json_invalid,
-       COALESCE(e.source_ip_prefix::text, '')::text AS source_ip_prefix, e.user_agent, e.correlation_id
+       COALESCE(set_masklen(e.source_ip_prefix, CASE family(e.source_ip_prefix) WHEN 4 THEN 24 ELSE 48 END)::text, '')::text AS source_ip_prefix, e.user_agent, e.correlation_id
 FROM app.webhook_events e
 JOIN app.projects p ON p.id = e.project_id
 JOIN app.endpoints en ON en.id = e.endpoint_id

@@ -42,6 +42,13 @@ describe('rendering untrusted content', () => {
     expect(alert).not.toHaveBeenCalled()
   })
 
+  it('shows bidi overrides in tree keys and values as visible escapes', () => {
+    const { getByRole } = render(<JsonTree value={{ ['\u202Ekey']: 'safe \u202Eevil' }} />)
+    const tree = getByRole('list', { name: 'JSON body' })
+    expect(tree.textContent).not.toContain('\u202E')
+    expect(tree).toHaveTextContent('"\\u202ekey": "safe \\u202eevil"')
+  })
+
   it('shows them in the raw view as text', () => {
     const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
     const text = payloads.join('\n')

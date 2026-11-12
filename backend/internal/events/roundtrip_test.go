@@ -40,7 +40,8 @@ func TestCredentialsNeverReachTheAPI(t *testing.T) {
 	}
 	red := redact.New(nil, nil)
 	ingest := chi.NewRouter()
-	ingest.Use(httpx.RequestIDMiddleware(slog.New(slog.DiscardHandler))) // as in production: every event has a correlation id
+	// As in production: every event has a correlation id and a client address.
+	ingest.Use(httpx.RequestIDMiddleware(slog.New(slog.DiscardHandler)), httpx.RealIP(nil))
 	ingestion.NewHandler(ingestion.Options{
 		Store: ingestion.NewPGStore(a.Pool), Hasher: keys, Redactor: red,
 		Metrics: ingestion.NewMetrics(prometheus.NewRegistry()), MaxBodyBytes: limits.IngestMaxBodyBytes,
@@ -99,6 +100,10 @@ func TestCredentialsNeverReachTheAPI(t *testing.T) {
 		if !flagged[name] {
 			t.Errorf("%s not shown as removed: %+v", name, d.Headers)
 		}
+	}
+	// httptest's client is 192.0.2.1; ingestion keeps only the /24.
+	if d.SourceIPPrefix == nil || *d.SourceIPPrefix != "192.0.2.0/24" {
+		t.Errorf("source_ip_prefix = %v, want 192.0.2.0/24", d.SourceIPPrefix)
 	}
 	if d.RedactedCount != 4 || d.Path != "/orders" || *d.Body.Text != `{"order":"A-1"}` {
 		t.Fatalf("detail: count %d path %q body %v", d.RedactedCount, d.Path, d.Body.Text)

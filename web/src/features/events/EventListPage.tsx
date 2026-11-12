@@ -17,6 +17,7 @@ import {
 import { EventFilterBar } from '@/features/events/EventFilterBar'
 import { MethodBadge } from '@/features/events/MethodBadge'
 import { formatBytes } from '@/features/events/payload/bytes'
+import { VisibleText } from '@/features/events/payload/RawText'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { isApiError } from '@/lib/api'
 import { formatPreciseDateTime, formatRelative } from '@/lib/format'
@@ -223,11 +224,11 @@ function EventTable({ projectId, events }: { projectId: string; events: EventSum
                   to={`/projects/${projectId}/events/${e.id}`}
                   className="font-mono break-all underline-offset-4 hover:underline"
                 >
-                  {e.path || '/'}
+                  <VisibleText text={e.path || '/'} />
                 </Link>
                 {e.content_type ? (
                   <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                    {e.content_type}
+                    <VisibleText text={e.content_type} />
                   </span>
                 ) : null}
               </th>

@@ -166,6 +166,24 @@ describe('event detail (4.2)', () => {
     expect(screen.queryByRole('button', { name: 'Copy as curl' })).not.toBeInTheDocument()
   })
 
+  it('shows bidi overrides in received paths and headers as visible escapes', async () => {
+    withProject({
+      [ONE]: {
+        body: detail({
+          path: '/pay\u202Eoof',
+          headers: [{ name: 'X-Name', value: 'ok\u202Ereversed', redacted: false }],
+        }),
+      },
+    })
+    renderApp(`/projects/${PID}/events/${ID}?tab=headers`)
+    expect(await screen.findByRole('heading', { name: /\/pay\\u202eoof/ })).toBeInTheDocument()
+    const row = within(screen.getByRole('table', { name: 'Request headers' })).getByRole('row', {
+      name: /X-Name/,
+    })
+    expect(row.textContent).not.toContain('\u202E')
+    expect(row).toHaveTextContent('ok\\u202ereversed')
+  })
+
   it('has no reveal control anywhere', async () => {
     withProject({ [ONE]: { body: detail() } })
     renderApp(`/projects/${PID}/events/${ID}`)

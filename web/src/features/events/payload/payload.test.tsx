@@ -71,6 +71,17 @@ describe('JsonTree', () => {
     expect(within(tree).queryByText('"two"')).not.toBeInTheDocument()
   })
 
+  it('expands everything, however many containers there are', async () => {
+    // 8,000 containers: more than any fixed list of paths would sensibly hold.
+    const value = { items: Array.from({ length: 4000 }, (_, i) => ({ deep: { i } })) }
+    const rows = visibleRows(value, new Map(), 'all')
+    expect(rows.filter((r) => r.kind === 'open' && !r.expanded)).toEqual([])
+    expect(rows.filter((r) => r.kind === 'value')).toHaveLength(4000)
+    // A toggle after "Expand all" still wins for that container.
+    const one = visibleRows(value, new Map([['$/items/3999/deep', false]]), 'all')
+    expect(one.find((r) => r.path === '$/items/3999/deep')).toMatchObject({ expanded: false })
+  })
+
   it('expands and collapses everything', async () => {
     render(<JsonTree value={nested} />)
     await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))

@@ -27,16 +27,30 @@ export type Row =
       value: null | boolean | number | string
     }
 
-/** Whether a container is open: the user's choice, else open above DEFAULT_OPEN_DEPTH. */
-export const isExpanded = (path: string, depth: number, overrides: ReadonlyMap<string, boolean>) =>
-  overrides.get(path) ?? depth < DEFAULT_OPEN_DEPTH
+/** What containers default to when the user has not toggled them. */
+export type OpenMode = 'depth' | 'all' | 'none'
+
+/**
+ * Whether a container is open: the user's choice for it, else the mode
+ * ("Expand all", "Collapse all", or open above DEFAULT_OPEN_DEPTH).
+ */
+export const isExpanded = (
+  path: string,
+  depth: number,
+  overrides: ReadonlyMap<string, boolean>,
+  mode: OpenMode = 'depth',
+) => overrides.get(path) ?? (mode === 'all' ? true : mode === 'none' ? false : depth < DEFAULT_OPEN_DEPTH)
 
 /**
  * Flattens a parsed JSON value into the rows currently visible, given which
  * containers the user opened or closed. Object keys keep their document order
  * (JSON.parse preserves it, except integer-like keys, which JavaScript sorts).
  */
-export function visibleRows(root: Json, overrides: ReadonlyMap<string, boolean>): Row[] {
+export function visibleRows(
+  root: Json,
+  overrides: ReadonlyMap<string, boolean>,
+  mode: OpenMode = 'depth',
+): Row[] {
   const rows: Row[] = []
   // Explicit stack instead of recursion: nesting depth is attacker-controlled.
   type Frame =
@@ -67,7 +81,7 @@ export function visibleRows(root: Json, overrides: ReadonlyMap<string, boolean>)
       label,
       container: isArray ? 'array' : 'object',
       size: entries.length,
-      expanded: isExpanded(path, depth, overrides),
+      expanded: isExpanded(path, depth, overrides, mode),
     }
     rows.push(open)
     if (!open.expanded || entries.length === 0) continue
@@ -87,22 +101,6 @@ export function visibleRows(root: Json, overrides: ReadonlyMap<string, boolean>)
 
 /** Escapes "/" and "~" in keys so paths stay unique (JSON Pointer style). */
 const encodePathPart = (k: string) => k.replaceAll('~', '~0').replaceAll('/', '~1')
-
-/** Every container path, for "Expand all". Stops at `limit` to stay responsive. */
-export function allContainerPaths(root: Json, limit = 5000): string[] {
-  const out: string[] = []
-  const stack: { value: Json; path: string }[] = [{ value: root, path: '$' }]
-  while (stack.length > 0 && out.length < limit) {
-    const { value, path } = stack.pop()!
-    if (value === null || typeof value !== 'object') continue
-    out.push(path)
-    const entries = Array.isArray(value)
-      ? value.map((v, i) => [String(i), v] as const)
-      : Object.entries(value)
-    for (const [k, v] of entries) stack.push({ value: v, path: `${path}/${encodePathPart(k)}` })
-  }
-  return out
-}
 
 /** Parses body text as JSON, or returns undefined when it is not valid JSON. */
 export function parseJson(text: string): { ok: true; value: Json } | { ok: false } {

@@ -52,7 +52,8 @@ func (a *api) full(t *testing.T, headers [][2]string, headerCount int, rawQuery 
 		  headers, redacted_header_count, content_type, body, body_size, body_encoding, body_json, json_invalid,
 		  source_ip_prefix, user_agent, correlation_id)
 		VALUES ($1, $2, $3, now(), 'POST', '/hooks/stripe', $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13,
-		  '203.0.113.0/24', 'Stripe/1.0', 'req-123')`,
+		  '203.0.113.0', 'Stripe/1.0', 'req-123') -- the prefix as ingestion stores it: truncated, no mask
+		  `,
 		id, a.ep, a.project, rawQuery, qj, hj, headerCount, contentType, body, len(body), encoding, bodyJSON, jsonInvalid); err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +265,20 @@ func TestSessionRequired(t *testing.T) {
 			if rec.Code != 401 || decodeJSON[errBody](t, rec.Body.Bytes()).Error.Code != tc.code {
 				t.Errorf("%s %s: %d %s", name, path, rec.Code, rec.Body)
 			}
+		}
+	}
+}
+
+func TestSourcePrefixShowsTruncation(t *testing.T) {
+	a := newAPI(t)
+	for stored, want := range map[string]string{"203.0.113.0": "203.0.113.0/24", "2001:db8:abcd::": "2001:db8:abcd::/48"} {
+		id := a.event(t, a.project, a.ep, time.Now().UTC(), "POST", nil)
+		if _, err := a.Admin.Exec(context.Background(), `UPDATE app.webhook_events SET source_ip_prefix = $1 WHERE id = $2`, stored, id); err != nil {
+			t.Fatal(err)
+		}
+		d := decodeJSON[detailJSON](t, a.alice.Do(http.MethodGet, a.base(a.project)+"/"+id.String(), "").Body.Bytes())
+		if d.SourceIPPrefix == nil || *d.SourceIPPrefix != want {
+			t.Errorf("%s: got %v, want %s", stored, d.SourceIPPrefix, want)
 		}
 	}
 }

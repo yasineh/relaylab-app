@@ -26,7 +26,9 @@ type Querier interface {
 	GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error)
 	// The parsed body_json copy is not returned: clients parse the exact body text,
 	// which keeps key order and duplicates. source_ip_prefix is returned as text
-	// ("203.0.113.0/24", or "" when none).
+	// ("203.0.113.0/24", or "" when none). Ingestion stores the truncated network
+	// address without a mask (it reads as /32 or /128), so the /24 or /48 it was
+	// truncated to is applied here.
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]byte, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)

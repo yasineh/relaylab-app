@@ -15,7 +15,7 @@ import { base64ToBytes, formatBytes } from '@/features/events/payload/bytes'
 import { HexView } from '@/features/events/payload/HexView'
 import { parseJson } from '@/features/events/payload/json-rows'
 import { JsonTree } from '@/features/events/payload/JsonTree'
-import { RawText } from '@/features/events/payload/RawText'
+import { RawText, VisibleText } from '@/features/events/payload/RawText'
 import { REDACTION_NOTE, RedactedMarker } from '@/features/events/RedactedMarker'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { isApiError } from '@/lib/api'
@@ -74,7 +74,9 @@ function EventView({ projectId, event: e }: { projectId: string; event: EventDet
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <MethodBadge method={e.method} />
-          <h2 className="font-mono text-lg font-semibold break-all">{requestTarget(e)}</h2>
+          <h2 className="font-mono text-lg font-semibold break-all">
+            <VisibleText text={requestTarget(e)} />
+          </h2>
         </div>
         <p className="text-sm text-muted-foreground">
           Received <time dateTime={e.received_at}>{formatPreciseDateTime(e.received_at)}</time> by{' '}
@@ -169,7 +171,9 @@ function Overview({ event: e }: { event: EventDetail }) {
       {rows.map(([k, v]) => (
         <div key={k} className="contents">
           <dt className="text-muted-foreground">{k}</dt>
-          <dd className="font-mono break-all">{v}</dd>
+          <dd className="font-mono break-all">
+            <VisibleText text={v} />
+          </dd>
         </div>
       ))}
       <dt className="sr-only">Note</dt>
@@ -287,7 +291,9 @@ function EntriesPanel({
       {rawQuery ? (
         <p className="text-sm">
           <span className="text-muted-foreground">Raw query: </span>
-          <code className="font-mono break-all">{rawQuery}</code>
+          <code className="font-mono break-all">
+            <VisibleText text={rawQuery} />
+          </code>
         </p>
       ) : null}
       <div className="overflow-x-auto rounded-lg border bg-card">
@@ -307,10 +313,10 @@ function EntriesPanel({
             {entries.map((x, i) => (
               <tr key={`${x.name}-${i}`}>
                 <th scope="row" className="px-4 py-2 text-left align-top font-medium break-all">
-                  {x.name}
+                  <VisibleText text={x.name} />
                 </th>
                 <td className="px-4 py-2 break-all whitespace-pre-wrap">
-                  {x.redacted ? <RedactedMarker describedBy={noteId} /> : x.value}
+                  {x.redacted ? <RedactedMarker describedBy={noteId} /> : <VisibleText text={x.value} />}
                 </td>
               </tr>
             ))}

@@ -103,6 +103,87 @@ func (q *Queries) GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]b
 	return body, err
 }
 
+const getEventReceivedAt = `-- name: GetEventReceivedAt :one
+SELECT e.received_at
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+WHERE e.id = $1 AND e.project_id = $2 AND p.owner_id = $3
+`
+
+type GetEventReceivedAtParams struct {
+	ID        pgtype.UUID
+	ProjectID pgtype.UUID
+	OwnerID   string
+}
+
+// Resolves a Last-Event-ID. No row means it is not this owner's project's event.
+func (q *Queries) GetEventReceivedAt(ctx context.Context, arg GetEventReceivedAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getEventReceivedAt, arg.ID, arg.ProjectID, arg.OwnerID)
+	var received_at pgtype.Timestamptz
+	err := row.Scan(&received_at)
+	return received_at, err
+}
+
+const getEventSummaries = `-- name: GetEventSummaries :many
+
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.id = ANY($1::uuid[]) AND e.project_id = $2 AND p.owner_id = $3
+ORDER BY e.received_at, e.id
+`
+
+type GetEventSummariesParams struct {
+	Ids       []pgtype.UUID
+	ProjectID pgtype.UUID
+	OwnerID   string
+}
+
+type GetEventSummariesRow struct {
+	ID           pgtype.UUID
+	EndpointID   pgtype.UUID
+	EndpointName string
+	ReceivedAt   pgtype.Timestamptz
+	Method       string
+	Path         string
+	ContentType  pgtype.Text
+	BodySize     int32
+}
+
+// Live stream queries (add-live-event-stream), owner-scoped like the explorer.
+// Summaries for ids the broker delivered. Ids from other projects or owners
+// are silently left out.
+func (q *Queries) GetEventSummaries(ctx context.Context, arg GetEventSummariesParams) ([]GetEventSummariesRow, error) {
+	rows, err := q.db.Query(ctx, getEventSummaries, arg.Ids, arg.ProjectID, arg.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetEventSummariesRow{}
+	for rows.Next() {
+		var i GetEventSummariesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.EndpointName,
+			&i.ReceivedAt,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertEvent = `-- name: InsertEvent :exec
 
 INSERT INTO app.webhook_events (
@@ -478,6 +559,72 @@ func (q *Queries) ListEventsDesc(ctx context.Context, arg ListEventsDescParams) 
 	items := []ListEventsDescRow{}
 	for rows.Next() {
 		var i ListEventsDescRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EndpointID,
+			&i.EndpointName,
+			&i.ReceivedAt,
+			&i.Method,
+			&i.Path,
+			&i.ContentType,
+			&i.BodySize,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventsReceivedSince = `-- name: ListEventsReceivedSince :many
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.project_id = $1 AND p.owner_id = $2
+  AND e.received_at >= $3
+ORDER BY e.received_at, e.id
+LIMIT $4
+`
+
+type ListEventsReceivedSinceParams struct {
+	ProjectID pgtype.UUID
+	OwnerID   string
+	Since     pgtype.Timestamptz
+	RowLimit  int32
+}
+
+type ListEventsReceivedSinceRow struct {
+	ID           pgtype.UUID
+	EndpointID   pgtype.UUID
+	EndpointName string
+	ReceivedAt   pgtype.Timestamptz
+	Method       string
+	Path         string
+	ContentType  pgtype.Text
+	BodySize     int32
+}
+
+// Resume backfill: events received at or after since, oldest first, using
+// (project_id, received_at).
+func (q *Queries) ListEventsReceivedSince(ctx context.Context, arg ListEventsReceivedSinceParams) ([]ListEventsReceivedSinceRow, error) {
+	rows, err := q.db.Query(ctx, listEventsReceivedSince,
+		arg.ProjectID,
+		arg.OwnerID,
+		arg.Since,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEventsReceivedSinceRow{}
+	for rows.Next() {
+		var i ListEventsReceivedSinceRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.EndpointID,

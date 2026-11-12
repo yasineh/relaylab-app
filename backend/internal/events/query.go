@@ -135,6 +135,10 @@ func listRows(ctx context.Context, q store.Querier, owner string, project uuid.U
 	if err != nil {
 		return nil, err
 	}
+	return toSummaries(rows), nil
+}
+
+func toSummaries(rows []store.ListEventsDescRow) []Summary {
 	out := make([]Summary, len(rows))
 	for i, r := range rows {
 		out[i] = Summary{
@@ -147,11 +151,12 @@ func listRows(ctx context.Context, q store.Querier, owner string, project uuid.U
 			out[i].ContentType = &ct
 		}
 	}
-	return out, nil
+	return out
 }
 
 type rowLike interface {
-	store.ListEventsAscRow | store.ListEndpointEventsDescRow | store.ListEndpointEventsAscRow
+	store.ListEventsAscRow | store.ListEndpointEventsDescRow | store.ListEndpointEventsAscRow |
+		store.GetEventSummariesRow | store.ListEventsReceivedSinceRow
 }
 
 func convertRows[R rowLike](in []R) []store.ListEventsDescRow {

@@ -83,10 +83,7 @@ func (e *Env) Count(t *testing.T, sql string, args ...any) int {
 // ID, body limit, same-origin and JSON checks, and real session validation.
 func (e *Env) Router(mount func(v1 chi.Router)) chi.Router {
 	appOrigin, _ := url.Parse(Origin)
-	v := identity.NewValidator(&config.Auth{
-		CookieName:    config.SessionCookieDev,
-		SessionSecret: config.NewSecret(authtest.SessionSecret),
-	}, store.New(e.Pool))
+	v := e.Validator()
 	r := chi.NewRouter()
 	r.Use(httpx.RequestIDMiddleware(slog.New(slog.DiscardHandler)), httpx.BodyLimit(config.DefaultLimits().APIMaxBodyBytes))
 	r.Route("/api/v1", func(v1 chi.Router) {
@@ -94,6 +91,14 @@ func (e *Env) Router(mount func(v1 chi.Router)) chi.Router {
 		mount(v1)
 	})
 	return r
+}
+
+// Validator returns the session validator the test router uses.
+func (e *Env) Validator() *identity.Validator {
+	return identity.NewValidator(&config.Auth{
+		CookieName:    config.SessionCookieDev,
+		SessionSecret: config.NewSecret(authtest.SessionSecret),
+	}, store.New(e.Pool))
 }
 
 // As returns a requester signed in as user (a fresh real session).

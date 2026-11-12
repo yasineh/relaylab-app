@@ -34,6 +34,7 @@ import (
 	"relaylab/internal/platform/logging"
 	"relaylab/internal/platform/redact"
 	"relaylab/internal/projects"
+	"relaylab/internal/realtime"
 )
 
 func main() {
@@ -138,12 +139,24 @@ func runServer() int {
 		IngestHost:        separateIngestHost(endpointCfg.IngestBaseURL.Hostname(), cfg.AppOrigin.Hostname()),
 	})
 
+	// Live event stream: one LISTEN connection per instance fans out to
+	// streams. Streams end when shutdown starts so it is not held up.
+	listener, err := realtime.NewPGSource(cfg.DatabaseURL, logger)
+	if err != nil {
+		logger.Error("event listener setup failed", slog.String("error", err.Error()))
+		return 1
+	}
+	broker := realtime.NewBroker(realtime.Options{Source: listener, Logger: logger})
+	go broker.Run(ctx)
+	validator := identity.NewValidator(authCfg, store.New(pool))
+	streamsDone := make(chan struct{})
+
 	handler := newRouter(routerDeps{
 		cfg:       cfg,
 		auth:      authCfg,
 		logger:    logger,
 		health:    checker,
-		validator: identity.NewValidator(authCfg, store.New(pool)),
+		validator: validator,
 		authProxy: identity.NewAuthProxy(identity.ProxyOptions{
 			Target:      authCfg.ServiceURL,
 			Secret:      authCfg.ProxySharedSecret,
@@ -153,11 +166,18 @@ func runServer() int {
 		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
 		endpoints: endpoints.NewHandler(endpoints.NewService(pool, tokenKeys,
 			endpointCfg.IngestBaseURL.String(), cfg.Limits.EndpointsPerProject)),
-		events:    events.NewHandler(events.NewService(pool, redactor), cfg.Limits.PageDefault, cfg.Limits.PageMax),
+		events: events.NewHandler(events.NewService(pool, redactor), cfg.Limits.PageDefault, cfg.Limits.PageMax).
+			WithStream(events.StreamOptions{
+				Broker:          broker,
+				Validator:       validator,
+				RevalidateEvery: cfg.StreamRevalidate,
+				Shutdown:        streamsDone,
+			}),
 		ingestion: ingestHandler,
 		web:       webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)
+	srv.RegisterOnShutdown(func() { close(streamsDone) })
 
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", cfg.HTTPAddr)
 	if err != nil {

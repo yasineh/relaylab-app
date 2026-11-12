@@ -31,6 +31,12 @@ type Querier interface {
 	// truncated to is applied here.
 	GetEvent(ctx context.Context, arg GetEventParams) (GetEventRow, error)
 	GetEventBody(ctx context.Context, arg GetEventBodyParams) ([]byte, error)
+	// Resolves a Last-Event-ID. No row means it is not this owner's project's event.
+	GetEventReceivedAt(ctx context.Context, arg GetEventReceivedAtParams) (pgtype.Timestamptz, error)
+	// Live stream queries (add-live-event-stream), owner-scoped like the explorer.
+	// Summaries for ids the broker delivered. Ids from other projects or owners
+	// are silently left out.
+	GetEventSummaries(ctx context.Context, arg GetEventSummariesParams) ([]GetEventSummariesRow, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)
 	// The only query Go runs against Better Auth's tables: read-only session lookup
 	// by the token from a signature-verified cookie (design decision 2, option A).
@@ -60,6 +66,9 @@ type Querier interface {
 	// underestimates rows ~10x and can pick a read-everything-then-sort plan
 	// (TestListQueriesUseIndexes).
 	ListEventsDesc(ctx context.Context, arg ListEventsDescParams) ([]ListEventsDescRow, error)
+	// Resume backfill: events received at or after since, oldest first, using
+	// (project_id, received_at).
+	ListEventsReceivedSince(ctx context.Context, arg ListEventsReceivedSinceParams) ([]ListEventsReceivedSinceRow, error)
 	ListProjects(ctx context.Context, ownerID string) ([]AppProject, error)
 	// Endpoint queries. Every dashboard query is scoped to the owner by joining
 	// app.projects (owner_id = the session user). Only GetEndpointByTokenHash, used

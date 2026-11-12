@@ -65,6 +65,30 @@ func TestLoadMalformedValues(t *testing.T) {
 			assertFieldError(t, err, k)
 		})
 	}
+	// The stream must re-check sessions at least every minute (spec).
+	for _, v := range []string{"61s", "2m", "500ms", "0s", "soon"} {
+		t.Run("STREAM_REVALIDATE_INTERVAL="+v, func(t *testing.T) {
+			env := validEnv()
+			env["STREAM_REVALIDATE_INTERVAL"] = v
+			_, err := Load(envFrom(env))
+			assertFieldError(t, err, "STREAM_REVALIDATE_INTERVAL")
+		})
+	}
+}
+
+func TestStreamRevalidateDefault(t *testing.T) {
+	c, err := Load(envFrom(validEnv()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.StreamRevalidate != time.Minute {
+		t.Fatalf("default = %s, want 1m", c.StreamRevalidate)
+	}
+	env := validEnv()
+	env["STREAM_REVALIDATE_INTERVAL"] = "15s"
+	if c, err = Load(envFrom(env)); err != nil || c.StreamRevalidate != 15*time.Second {
+		t.Fatalf("15s: %v %v", c, err)
+	}
 }
 
 func TestProductionRequiresHTTPSOrigin(t *testing.T) {

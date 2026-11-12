@@ -21,6 +21,7 @@ func TestIsolationAcrossUsers(t *testing.T) {
 		{Method: http.MethodGet, Path: "/api/v1/projects/{id}/events?endpoint_id=" + a.ep.String()},
 		{Method: http.MethodGet, Path: "/api/v1/projects/{id}/events/" + ev.String()},
 		{Method: http.MethodGet, Path: "/api/v1/projects/{id}/events/" + ev.String() + "/body"},
+		{Method: http.MethodGet, Path: "/api/v1/projects/{id}/events/stream"},
 	})
 	// Alice's event id under alice's project and under bob's own project.
 	isolation.AssertForeignNotFound(t, a.bob, ev.String(), []isolation.Route{

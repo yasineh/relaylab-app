@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"relaylab/internal/platform/redact"
+	"relaylab/internal/realtime"
 	"relaylab/internal/testutil/isolation"
 )
 
@@ -28,7 +29,10 @@ func newAPI(t *testing.T) *api {
 	e := newSeedEnv(t)
 	svc := NewService(e.Pool, redact.New(nil, nil))
 	h := e.Router(func(v1 chi.Router) {
-		v1.Route("/projects/{projectId}/events", NewHandler(svc, 50, 100).Routes)
+		// The stream route is mounted for isolation checks; its broker never
+		// runs here (stream_test.go covers delivery).
+		v1.Route("/projects/{projectId}/events", NewHandler(svc, 50, 100).
+			WithStream(StreamOptions{Broker: realtime.NewBroker(realtime.Options{}), Validator: e.Validator()}).Routes)
 	})
 	return &api{seedEnv: e, h: h, alice: e.As(t, h, "alice"), bob: e.As(t, h, "bob"), ep: e.endpoint(t, e.project, "Stripe")}
 }

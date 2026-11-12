@@ -33,6 +33,9 @@ type Config struct {
 	LogLevel         slog.Level
 	TrustedProxies   []netip.Prefix
 	ShutdownGrace    time.Duration
+	// StreamRevalidate is how often a live event stream re-checks its
+	// session and project (at most a minute, per the live-event-stream spec).
+	StreamRevalidate time.Duration
 	Limits           Limits
 }
 
@@ -117,6 +120,13 @@ func Load(getenv Getenv) (*Config, error) {
 		fail("SHUTDOWN_GRACE", "must be a positive duration such as 20s")
 	} else {
 		c.ShutdownGrace = grace
+	}
+
+	revalidate, err := time.ParseDuration(withDefault(getenv("STREAM_REVALIDATE_INTERVAL"), "60s"))
+	if err != nil || revalidate < time.Second || revalidate > time.Minute {
+		fail("STREAM_REVALIDATE_INTERVAL", "must be a duration from 1s to 60s")
+	} else {
+		c.StreamRevalidate = revalidate
 	}
 
 	limits, err := LoadLimits(getenv)

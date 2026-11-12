@@ -22,6 +22,17 @@ import (
 // contract (live-event-stream spec), not an operator limit.
 const SubscriberBuffer = 256
 
+// DropReason says why the broker dropped a subscription.
+type DropReason int
+
+const (
+	// DropSlow means the subscriber's buffer was full.
+	DropSlow DropReason = iota + 1
+	// DropReconnect means the LISTEN connection was (re)established, so
+	// notifications may have been lost.
+	DropReconnect
+)
+
 // Notification is one committed event, as published by ingestion.
 type Notification struct {
 	ProjectID uuid.UUID
@@ -43,6 +54,8 @@ type Options struct {
 	MinBackoff, MaxBackoff time.Duration
 	// OnSlowDrop is called once for each subscriber dropped for a full buffer.
 	OnSlowDrop func()
+	// OnConnect is called each time the source starts listening.
+	OnConnect func()
 }
 
 // Broker owns the subscriber registry. It is safe for concurrent use.
@@ -77,6 +90,9 @@ func (b *Broker) Run(ctx context.Context) {
 			backoff = b.o.MinBackoff
 			if n := b.dropAll(); n > 0 {
 				b.o.Logger.Info("event listener connected; streams must resync", slog.Int("streams", n))
+			}
+			if b.o.OnConnect != nil {
+				b.o.OnConnect()
 			}
 		}, b.dispatch)
 		if ctx.Err() != nil {
@@ -140,7 +156,7 @@ func (b *Broker) dispatch(n Notification) {
 		case s.ch <- n.EventID:
 		default:
 			b.removeLocked(s)
-			close(s.dropped)
+			s.drop(DropSlow)
 			slow++
 		}
 	}
@@ -159,7 +175,7 @@ func (b *Broker) dropAll() int {
 	n := 0
 	for _, set := range b.subs {
 		for s := range set {
-			close(s.dropped)
+			s.drop(DropReconnect)
 			n++
 		}
 	}
@@ -185,7 +201,19 @@ type Subscription struct {
 	project uuid.UUID
 	ch      chan uuid.UUID
 	dropped chan struct{}
+	reason  DropReason // written before dropped is closed
 }
+
+// drop records why and closes dropped. Callers hold the broker lock and have
+// removed s from the registry, so it runs at most once.
+func (s *Subscription) drop(r DropReason) {
+	s.reason = r
+	close(s.dropped)
+}
+
+// Reason reports why the subscription was dropped. Read it only after
+// Dropped is closed.
+func (s *Subscription) Reason() DropReason { return s.reason }
 
 // Events delivers event ids in notification order.
 func (s *Subscription) Events() <-chan uuid.UUID { return s.ch }

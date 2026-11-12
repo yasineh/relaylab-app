@@ -211,11 +211,20 @@ func freePort(t testing.TB) int {
 // SessionSecret, in Better Auth's format: relaylab.session_token=<token>.<sig>.
 func SessionCookie(t testing.TB, d *dbtest.DB, userID string) string {
 	t.Helper()
+	cookie, _ := Session(t, d, userID, time.Now().Add(24*time.Hour))
+	return cookie
+}
+
+// Session inserts a session for userID expiring at expiresAt and returns its
+// Cookie header value and its token (the auth."session".token column, for
+// tests that revoke or extend it).
+func Session(t testing.TB, d *dbtest.DB, userID string, expiresAt time.Time) (cookie, token string) {
+	t.Helper()
 	b := make([]byte, 24)
 	if _, err := rand.Read(b); err != nil {
 		t.Fatal(err)
 	}
-	token := hex.EncodeToString(b)[:32]
+	token = hex.EncodeToString(b)[:32]
 	ctx := context.Background()
 	c, err := pgx.Connect(ctx, d.AuthRuntimeURL)
 	if err != nil {
@@ -223,13 +232,13 @@ func SessionCookie(t testing.TB, d *dbtest.DB, userID string) string {
 	}
 	defer func() { _ = c.Close(ctx) }()
 	if _, err := c.Exec(ctx, `INSERT INTO auth."session" (id, "expiresAt", token, "createdAt", "updatedAt", "userId")
-		VALUES ($1, now() + interval '1 day', $2, now(), now(), $3)`, "s-"+token, token, userID); err != nil {
+		VALUES ($1, $2, $3, now(), now(), $4)`, "s-"+token, expiresAt, token, userID); err != nil {
 		t.Fatalf("seed session: %v", err)
 	}
 	mac := hmac.New(sha256.New, []byte(SessionSecret))
 	mac.Write([]byte(token))
 	value := token + "." + base64.StdEncoding.EncodeToString(mac.Sum(nil))
-	return "relaylab.session_token=" + url.QueryEscape(value)
+	return "relaylab.session_token=" + url.QueryEscape(value), token
 }
 
 // SeedUser inserts a verified user with the given id (email <id>@example.test).

@@ -21,6 +21,7 @@ import (
 type Handler struct {
 	svc                  *Service
 	pageDefault, pageMax int
+	streamOpts           *StreamOptions // nil: no live stream route
 }
 
 // NewHandler returns the HTTP handler for events, with page sizes from the
@@ -32,6 +33,9 @@ func NewHandler(svc *Service, pageDefault, pageMax int) *Handler {
 // Routes registers the event routes (mounted at /projects/{projectId}/events).
 func (h *Handler) Routes(r chi.Router) {
 	r.Get("/", h.list)
+	if h.streamOpts != nil {
+		r.Get("/stream", h.stream)
+	}
 	r.Get("/{eventId}", h.get)
 	r.Get("/{eventId}/body", h.body)
 }

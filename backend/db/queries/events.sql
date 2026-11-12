@@ -119,3 +119,36 @@ SELECT e.body
 FROM app.webhook_events e
 JOIN app.projects p ON p.id = e.project_id
 WHERE e.id = sqlc.arg(id) AND e.project_id = sqlc.arg(project_id) AND p.owner_id = sqlc.arg(owner_id);
+
+-- Live stream queries (add-live-event-stream), owner-scoped like the explorer.
+
+-- name: GetEventSummaries :many
+-- Summaries for ids the broker delivered. Ids from other projects or owners
+-- are silently left out.
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.id = ANY(sqlc.arg(ids)::uuid[]) AND e.project_id = sqlc.arg(project_id) AND p.owner_id = sqlc.arg(owner_id)
+ORDER BY e.received_at, e.id;
+
+-- name: GetEventReceivedAt :one
+-- Resolves a Last-Event-ID. No row means it is not this owner's project's event.
+SELECT e.received_at
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+WHERE e.id = sqlc.arg(id) AND e.project_id = sqlc.arg(project_id) AND p.owner_id = sqlc.arg(owner_id);
+
+-- name: ListEventsReceivedSince :many
+-- Resume backfill: events received at or after since, oldest first, using
+-- (project_id, received_at).
+SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
+       e.content_type, e.body_size
+FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN app.endpoints en ON en.id = e.endpoint_id
+WHERE e.project_id = sqlc.arg(project_id) AND p.owner_id = sqlc.arg(owner_id)
+  AND e.received_at >= sqlc.arg(since)
+ORDER BY e.received_at, e.id
+LIMIT sqlc.arg(row_limit);

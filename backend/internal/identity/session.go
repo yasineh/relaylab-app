@@ -33,6 +33,9 @@ type Identity struct {
 	Email         string
 	Name          string
 	EmailVerified bool
+	// ExpiresAt is the session's expiry at validation time. Better Auth may
+	// extend it later, so long-lived requests re-validate instead of trusting it.
+	ExpiresAt time.Time
 }
 
 // SessionStore is the read-only lookup Go performs against Better Auth's tables.
@@ -134,6 +137,7 @@ func (v *Validator) Validate(ctx context.Context, r *http.Request) (Identity, er
 		Email:         row.Email,
 		Name:          row.Name,
 		EmailVerified: row.EmailVerified,
+		ExpiresAt:     row.ExpiresAt.Time,
 	}, nil
 }
 

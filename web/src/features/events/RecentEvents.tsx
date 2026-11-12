@@ -5,6 +5,7 @@ import { Link } from 'react-router'
 
 import { Button, buttonVariants } from '@/components/ui/button'
 import { useEvents, type EventFilters } from '@/features/events/api'
+import { ConnectionStatus } from '@/features/events/ConnectionStatus'
 import { useEventStream, useLiveInsert } from '@/features/events/live'
 import { MethodBadge } from '@/features/events/MethodBadge'
 import { VisibleText } from '@/features/events/payload/RawText'
@@ -23,7 +24,7 @@ export function RecentEvents({ projectId }: { projectId: string }) {
   const events = useEvents(projectId, ALL)
   const [now] = useState(() => new Date())
   const insert = useLiveInsert(projectId, ALL)
-  useEventStream(projectId, {
+  const state = useEventStream(projectId, {
     // A small card has no scroll position to protect: always insert.
     onEvent: (e) => void insert([e]),
     onSync: () => void queryClient.invalidateQueries({ queryKey: ['events', projectId] }),
@@ -37,6 +38,7 @@ export function RecentEvents({ projectId }: { projectId: string }) {
         <h2 id="events-heading" className="flex items-center gap-2 font-medium">
           <Inbox aria-hidden="true" className="size-5 text-primary" /> Recent events
         </h2>
+        <ConnectionStatus state={state} />
       </div>
       {events.isPending ? (
         <output className="flex items-center gap-2 text-sm text-muted-foreground">

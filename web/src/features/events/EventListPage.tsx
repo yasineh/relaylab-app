@@ -14,6 +14,7 @@ import {
   type EventFilters,
   type EventSummary,
 } from '@/features/events/api'
+import { ConnectionStatus } from '@/features/events/ConnectionStatus'
 import { EventFilterBar } from '@/features/events/EventFilterBar'
 import { useLiveEventList } from '@/features/events/live'
 import { MethodBadge } from '@/features/events/MethodBadge'
@@ -38,10 +39,13 @@ export function EventListPage() {
 
   return (
     <div className="space-y-6">
-      <p className="max-w-2xl text-muted-foreground">
-        Every request your endpoints received, newest first. Payloads may contain confidential or personal
-        data.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-muted-foreground">
+          Every request your endpoints received, newest first. Payloads may contain confidential or personal
+          data.
+        </p>
+        <ConnectionStatus state={live.state} />
+      </div>
       <EventFilterBar
         // Remount when the URL changes (back/forward, clear) so the form shows the applied filters.
         key={params.toString()}

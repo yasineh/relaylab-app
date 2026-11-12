@@ -227,9 +227,13 @@ describe('endpoint detail (4.3)', () => {
     const curl = `curl -X POST '${URL1}' -H 'Content-Type: application/json' -d '{"hello":"relaylab"}'`
     expect(await screen.findByText(curl, { selector: 'pre' })).toBeInTheDocument()
 
-    // Explains the acknowledgement and redaction, and is honest that the event explorer has not shipped.
+    // Explains the acknowledgement and redaction, and links to this endpoint's events.
     expect(screen.getByText(/replaced with/)).toHaveTextContent('Authorization and Cookie')
-    expect(screen.getByText(/Viewing received requests is not available/)).toBeInTheDocument()
+    expect(screen.queryByText(/Viewing received requests is not available/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: "View this endpoint's events" })).toHaveAttribute(
+      'href',
+      `/projects/${PID}/events?endpoint_id=${EID}`,
+    )
     expect(screen.queryByText(/Receiving requests is not available/)).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Copy URL' }))

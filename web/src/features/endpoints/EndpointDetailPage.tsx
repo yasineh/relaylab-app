@@ -136,8 +136,13 @@ function ReceivingUrl({ endpoint: e }: { endpoint: Endpoint }) {
           RelayLab stores each request and replies with{' '}
           <code className="font-mono">{'{"ok":true,"event_id":"…"}'}</code>. Values of credential headers and
           query parameters, such as Authorization and Cookie, are replaced with{' '}
-          <code className="font-mono">[REDACTED]</code> before storage. Viewing received requests is not
-          available in this version of RelayLab yet.
+          <code className="font-mono">[REDACTED]</code> before storage.{' '}
+          <Link
+            to={`/projects/${e.project_id}/events?endpoint_id=${e.id}`}
+            className="font-medium underline underline-offset-4"
+          >
+            View this endpoint&apos;s events
+          </Link>
         </p>
       </Alert>
       <div className="space-y-2">

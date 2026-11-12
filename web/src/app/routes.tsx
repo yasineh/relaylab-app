@@ -11,6 +11,7 @@ import { SignUpPage } from '@/features/auth/SignUpPage'
 import { VerifyEmailPage } from '@/features/auth/VerifyEmailPage'
 import { EndpointDetailPage } from '@/features/endpoints/EndpointDetailPage'
 import { EndpointListPage } from '@/features/endpoints/EndpointListPage'
+import { EventDetailPage } from '@/features/events/EventDetailPage'
 import { EventListPage } from '@/features/events/EventListPage'
 import { ProjectLayout } from '@/features/projects/ProjectLayout'
 import { ProjectListPage } from '@/features/projects/ProjectListPage'
@@ -45,6 +46,7 @@ export const routes: RouteObject[] = [
               { path: 'endpoints', element: <EndpointListPage /> },
               { path: 'endpoints/:endpointId', element: <EndpointDetailPage /> },
               { path: 'events', element: <EventListPage /> },
+              { path: 'events/:eventId', element: <EventDetailPage /> },
               { path: 'settings', element: <ProjectSettingsPage /> },
             ],
           },

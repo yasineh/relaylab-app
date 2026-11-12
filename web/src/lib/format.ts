@@ -31,5 +31,7 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
 
 /** Formats an ISO timestamp with seconds, for precise event times. */
 export function formatPreciseDateTime(iso: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(iso))
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium' }).format(
+    new Date(iso),
+  )
 }

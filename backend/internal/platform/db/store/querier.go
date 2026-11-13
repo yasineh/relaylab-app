@@ -25,9 +25,18 @@ type Querier interface {
 	CreateProject(ctx context.Context, arg CreateProjectParams) (AppProject, error)
 	// One statement; the endpoint's events and replays go by FK cascade.
 	DeleteEndpoint(ctx context.Context, arg DeleteEndpointParams) (DeleteEndpointRow, error)
+	// One batch of an endpoint's events. The caller checks endpoint ownership
+	// first, so zero rows means the endpoint has no events left.
+	DeleteEndpointEventsBatch(ctx context.Context, arg DeleteEndpointEventsBatchParams) (int64, error)
+	// User deletion (add-event-retention), owner-scoped like the reads. Replay
+	// attempts go with their event by ON DELETE CASCADE.
+	DeleteEvent(ctx context.Context, arg DeleteEventParams) (int64, error)
 	// One statement; everything scoped to the project goes by FK cascade.
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
 	DeleteStaleWorkerHeartbeats(ctx context.Context) error
+	// The newest event that falls outside the cap: everything at or before it
+	// (by received_at, then id) is beyond the cap.
+	EventCapBoundary(ctx context.Context, arg EventCapBoundaryParams) (EventCapBoundaryRow, error)
 	// Keys are honoured for 24 hours; an older row gives its key up for reuse.
 	ExpireIdempotencyKey(ctx context.Context, arg ExpireIdempotencyKeyParams) error
 	ExtendJobLease(ctx context.Context, arg ExtendJobLeaseParams) (int64, error)
@@ -56,6 +65,7 @@ type Querier interface {
 	// Summaries for ids the broker delivered. Ids from other projects or owners
 	// are silently left out.
 	GetEventSummaries(ctx context.Context, arg GetEventSummariesParams) ([]GetEventSummariesRow, error)
+	GetOwnedEndpointID(ctx context.Context, arg GetOwnedEndpointIDParams) (pgtype.UUID, error)
 	GetProject(ctx context.Context, arg GetProjectParams) (AppProject, error)
 	GetReplay(ctx context.Context, arg GetReplayParams) (GetReplayRow, error)
 	GetReplayByIdempotencyKey(ctx context.Context, arg GetReplayByIdempotencyKeyParams) (GetReplayByIdempotencyKeyRow, error)
@@ -130,11 +140,33 @@ type Querier interface {
 	NotifyJobs(ctx context.Context) error
 	// Readiness probe: a trivial round trip using the runtime role.
 	Ping(ctx context.Context) (int32, error)
+	// Projects holding more than cap events. Fine at MVP scale; a maintained
+	// counter is the follow-up if this scan grows expensive.
+	ProjectsOverEventCap(ctx context.Context, cap int64) ([]pgtype.UUID, error)
+	PurgeAuditLog(ctx context.Context, arg PurgeAuditLogParams) (int64, error)
+	// Retention purge (add-event-retention). Every statement deletes at most
+	// row_limit rows; the worker loops until a batch comes back short. Ages are
+	// measured with the database clock (now()), never the worker's.
+	// Oldest events received before now() - ttl. Their replay attempts go by
+	// ON DELETE CASCADE; replays is how many were removed with them.
+	PurgeExpiredEvents(ctx context.Context, arg PurgeExpiredEventsParams) (PurgeExpiredEventsRow, error)
+	// Only done and dead jobs; queued and running jobs are never purged by age.
+	PurgeFinishedJobs(ctx context.Context, arg PurgeFinishedJobsParams) (int64, error)
+	// Safety net (D18): project deletion already removes its jobs in the same
+	// transaction, so this normally finds nothing. Jobs whose project, or whose
+	// replay attempt, no longer exists are removed, except running jobs: their
+	// worker finishes them, and its lease-checked writes then affect no rows.
+	PurgeOrphanedJobs(ctx context.Context, rowLimit int32) (int64, error)
+	// One batch of a project's events at or before the cap boundary, oldest first.
+	PurgeProjectEventsThrough(ctx context.Context, arg PurgeProjectEventsThroughParams) (PurgeProjectEventsThroughRow, error)
 	// Expired leases go back to the queue, or to dead after max_attempts claims.
 	ReapExpiredJobs(ctx context.Context) ([]ReapExpiredJobsRow, error)
+	ReleaseRetentionLock(ctx context.Context) (bool, error)
 	RotateEndpointToken(ctx context.Context, arg RotateEndpointTokenParams) (RotateEndpointTokenRow, error)
 	// Never moves last_received_at backwards when requests commit out of order.
 	TouchEndpointReceived(ctx context.Context, arg TouchEndpointReceivedParams) error
+	// Session-level lock held for one purge run, so only one worker purges.
+	TryRetentionLock(ctx context.Context) (bool, error)
 	// NULL arguments keep the current value.
 	UpdateEndpoint(ctx context.Context, arg UpdateEndpointParams) (UpdateEndpointRow, error)
 	// NULL arguments keep the current value; set_description distinguishes

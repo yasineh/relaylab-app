@@ -13,6 +13,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"relaylab/internal/platform/config"
+	"relaylab/internal/retention"
 )
 
 // syncBuffer is a log sink safe for concurrent writers.
@@ -100,5 +103,64 @@ func TestProjectDeletedDuringDelivery(t *testing.T) {
 	}
 	if strings.Contains(out, "s3cret") {
 		t.Fatal("override value logged")
+	}
+}
+
+// TestEventDeletedDuringDelivery: the owner deletes the event (or retention
+// expires it) while its replay is being delivered. The replay goes with the
+// event; the retention orphan sweep leaves the running job to its worker,
+// which finishes it once, without error or retry.
+func TestEventDeletedDuringDelivery(t *testing.T) {
+	e := newExecEnv(t)
+	e.opts.ResponseHeaderTimeout = 5 * time.Second
+	e.opts.TotalTimeout = 10 * time.Second
+	var hits atomic.Int32
+	inFlight := make(chan struct{})
+	release := make(chan struct{})
+	url := e.server("example.com", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		if hits.Add(1) == 1 {
+			close(inFlight)
+			<-release
+		}
+		w.WriteHeader(http.StatusInternalServerError) // would be retried if the replay still existed
+	})
+	e.build()
+	logs := &syncBuffer{}
+	e.deliverer.logger = slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	e.runner.logger = e.deliverer.logger
+
+	doomed := e.queue(url, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.runner.Run(ctx)
+	<-inFlight
+
+	if _, err := e.Admin.Exec(context.Background(), `DELETE FROM app.webhook_events WHERE id = $1`, e.event); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Retention{EventTTL: time.Hour, MaxEventsPerProject: 10, AuditTTL: time.Hour, JobTTL: time.Hour, Interval: time.Minute}
+	res, ran, err := retention.New(e.Pool, cfg, nil, nil).RunOnce(context.Background())
+	if err != nil || !ran || res.OrphanedJobs != 0 {
+		t.Fatalf("sweep: ran=%v res=%+v err=%v", ran, res, err)
+	}
+	if e.Count(t, `SELECT count(*) FROM app.jobs WHERE state = 'running'`) != 1 {
+		t.Fatal("running job swept")
+	}
+	close(release)
+
+	waitFor(t, 5*time.Second, func() bool {
+		return e.Count(t, `SELECT count(*) FROM app.jobs WHERE state = 'done'`) == 1
+	})
+	time.Sleep(200 * time.Millisecond)
+	if hits.Load() != 1 {
+		t.Fatalf("delivered %d times", hits.Load())
+	}
+	out := logs.String()
+	if strings.Contains(out, `"level":"ERROR"`) || strings.Contains(out, `"level":"WARN"`) {
+		t.Fatalf("vanished replay logged as a problem: %s", out)
+	}
+	if e.Count(t, `SELECT count(*) FROM app.replay_attempts WHERE id = $1`, doomed) != 0 {
+		t.Fatal("replay written back")
 	}
 }

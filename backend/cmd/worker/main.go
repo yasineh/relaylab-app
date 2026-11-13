@@ -1,12 +1,14 @@
 // Command worker runs RelayLab background jobs and exposes liveness and
 // readiness on an internal port (WORKER_HEALTH_ADDR, default :8081).
 //
-// It runs replay jobs (add-event-replay, D5) from the Postgres queue when
+// It runs the retention purge (add-event-retention) every RETENTION_INTERVAL;
+// a database advisory lock lets only one worker purge at a time. It runs
+// replay jobs (add-event-replay, D5) from the Postgres queue when
 // REPLAY_ENABLED is true, and every 15 seconds reports its outbound guard's
 // self-check to app.worker_heartbeats, which the API reads before offering
 // URL replay. Readiness reports the guard as outbound_guard (active or
-// inactive), and /metrics on the same internal port exposes the outbound and
-// replay metrics.
+// inactive), and /metrics on the same internal port exposes the outbound,
+// replay, and retention metrics.
 package main
 
 import (
@@ -34,6 +36,7 @@ import (
 	"relaylab/internal/platform/redact"
 	"relaylab/internal/replay"
 	"relaylab/internal/replay/outbound"
+	"relaylab/internal/retention"
 )
 
 func main() { os.Exit(run()) }
@@ -58,6 +61,12 @@ func run() int {
 		return 1
 	}
 	ingestCfg, err := config.LoadIngest(os.Getenv)
+	if err != nil {
+		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
+	retentionCfg, err := config.LoadRetention(os.Getenv, cfg.Env)
 	if err != nil {
 		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
 			Error("invalid configuration", slog.String("error", err.Error()))
@@ -89,6 +98,7 @@ func run() int {
 	checker := health.New(dbCheck, migCheck)
 
 	workerID := newWorkerID()
+	go retention.New(pool, retentionCfg, logger, retention.NewMetrics(registry)).Run(ctx)
 	go replay.NewHeartbeat(pool, workerID, outbound.UserAgent(), guard, logger).Run(ctx)
 	if replayCfg.Enabled {
 		var sealer *replay.Sealer
@@ -130,7 +140,8 @@ func run() int {
 		return 1
 	}
 	logger.Info("worker started", slog.String("health_addr", ln.Addr().String()),
-		slog.String("worker_id", workerID), slog.Bool("replay_enabled", replayCfg.Enabled))
+		slog.String("worker_id", workerID), slog.Bool("replay_enabled", replayCfg.Enabled),
+		slog.Duration("retention_event_ttl", retentionCfg.EventTTL), slog.Int("retention_max_events_per_project", retentionCfg.MaxEventsPerProject))
 
 	if err := httpx.Serve(ctx, srv, ln, cfg.ShutdownGrace, checker.MarkShuttingDown); err != nil {
 		logger.Error("worker health server stopped with error", slog.String("error", err.Error()))

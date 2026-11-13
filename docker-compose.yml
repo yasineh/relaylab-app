@@ -19,6 +19,12 @@ x-replay-env: &replay-env
   OUTBOUND_ALLOWED_PORTS: ${OUTBOUND_ALLOWED_PORTS:-}
   OUTBOUND_BLOCKED_HOSTS: ${OUTBOUND_BLOCKED_HOSTS:-}
   INGEST_BASE_URL: ${INGEST_BASE_URL:-}
+  # Retention: the worker purges, the api reports the event TTL and cap.
+  RETENTION_EVENT_TTL: ${RETENTION_EVENT_TTL:-}
+  RETENTION_MAX_EVENTS_PER_PROJECT: ${RETENTION_MAX_EVENTS_PER_PROJECT:-}
+  RETENTION_AUDIT_TTL: ${RETENTION_AUDIT_TTL:-}
+  RETENTION_JOB_TTL: ${RETENTION_JOB_TTL:-}
+  RETENTION_INTERVAL: ${RETENTION_INTERVAL:-}
 
 # Shared by the auth service and the api (session signing and the proxy header).
 x-auth-env: &auth-env

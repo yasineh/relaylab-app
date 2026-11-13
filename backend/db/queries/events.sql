@@ -152,3 +152,28 @@ WHERE e.project_id = sqlc.arg(project_id) AND p.owner_id = sqlc.arg(owner_id)
   AND e.received_at >= sqlc.arg(since)
 ORDER BY e.received_at, e.id
 LIMIT sqlc.arg(row_limit);
+
+-- User deletion (add-event-retention), owner-scoped like the reads. Replay
+-- attempts go with their event by ON DELETE CASCADE.
+
+-- name: DeleteEvent :execrows
+DELETE FROM app.webhook_events e
+USING app.projects p
+WHERE e.id = sqlc.arg(id) AND e.project_id = sqlc.arg(project_id)
+  AND p.id = e.project_id AND p.owner_id = sqlc.arg(owner_id);
+
+-- name: DeleteEndpointEventsBatch :execrows
+-- One batch of an endpoint's events. The caller checks endpoint ownership
+-- first, so zero rows means the endpoint has no events left.
+DELETE FROM app.webhook_events WHERE id IN (
+  SELECT e.id FROM app.webhook_events e
+  JOIN app.projects p ON p.id = e.project_id
+  WHERE e.endpoint_id = sqlc.arg(endpoint_id) AND e.project_id = sqlc.arg(project_id)
+    AND p.owner_id = sqlc.arg(owner_id)
+  LIMIT sqlc.arg(row_limit)
+);
+
+-- name: GetOwnedEndpointID :one
+SELECT e.id FROM app.endpoints e
+JOIN app.projects p ON p.id = e.project_id
+WHERE e.id = sqlc.arg(id) AND e.project_id = sqlc.arg(project_id) AND p.owner_id = sqlc.arg(owner_id);

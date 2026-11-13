@@ -12,6 +12,62 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteEndpointEventsBatch = `-- name: DeleteEndpointEventsBatch :execrows
+DELETE FROM app.webhook_events WHERE id IN (
+  SELECT e.id FROM app.webhook_events e
+  JOIN app.projects p ON p.id = e.project_id
+  WHERE e.endpoint_id = $1 AND e.project_id = $2
+    AND p.owner_id = $3
+  LIMIT $4
+)
+`
+
+type DeleteEndpointEventsBatchParams struct {
+	EndpointID pgtype.UUID
+	ProjectID  pgtype.UUID
+	OwnerID    string
+	RowLimit   int32
+}
+
+// One batch of an endpoint's events. The caller checks endpoint ownership
+// first, so zero rows means the endpoint has no events left.
+func (q *Queries) DeleteEndpointEventsBatch(ctx context.Context, arg DeleteEndpointEventsBatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEndpointEventsBatch,
+		arg.EndpointID,
+		arg.ProjectID,
+		arg.OwnerID,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteEvent = `-- name: DeleteEvent :execrows
+
+DELETE FROM app.webhook_events e
+USING app.projects p
+WHERE e.id = $1 AND e.project_id = $2
+  AND p.id = e.project_id AND p.owner_id = $3
+`
+
+type DeleteEventParams struct {
+	ID        pgtype.UUID
+	ProjectID pgtype.UUID
+	OwnerID   string
+}
+
+// User deletion (add-event-retention), owner-scoped like the reads. Replay
+// attempts go with their event by ON DELETE CASCADE.
+func (q *Queries) DeleteEvent(ctx context.Context, arg DeleteEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteEvent, arg.ID, arg.ProjectID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getEvent = `-- name: GetEvent :one
 SELECT e.id, e.endpoint_id, en.name AS endpoint_name, e.received_at, e.method, e.path,
        e.raw_query, e.query_params, e.headers, e.redacted_header_count, e.content_type,
@@ -182,6 +238,25 @@ func (q *Queries) GetEventSummaries(ctx context.Context, arg GetEventSummariesPa
 		return nil, err
 	}
 	return items, nil
+}
+
+const getOwnedEndpointID = `-- name: GetOwnedEndpointID :one
+SELECT e.id FROM app.endpoints e
+JOIN app.projects p ON p.id = e.project_id
+WHERE e.id = $1 AND e.project_id = $2 AND p.owner_id = $3
+`
+
+type GetOwnedEndpointIDParams struct {
+	ID        pgtype.UUID
+	ProjectID pgtype.UUID
+	OwnerID   string
+}
+
+func (q *Queries) GetOwnedEndpointID(ctx context.Context, arg GetOwnedEndpointIDParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getOwnedEndpointID, arg.ID, arg.ProjectID, arg.OwnerID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertEvent = `-- name: InsertEvent :exec

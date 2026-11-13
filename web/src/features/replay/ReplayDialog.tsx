@@ -40,6 +40,8 @@ type Props = {
   urlAvailable: boolean
   /** REPLAY_ENABLED on the server: URL replay is turned on at all. Defaults to urlAvailable. */
   urlEnabled?: boolean
+  /** A demo workspace: replay goes to the test sink only. */
+  demo?: boolean
 }
 
 export function ReplayDialog({
@@ -51,6 +53,7 @@ export function ReplayDialog({
   endpoints,
   urlAvailable,
   urlEnabled = urlAvailable,
+  demo = false,
 }: Props) {
   // Remount per opening: fresh fields and a fresh Idempotency-Key.
   return open ? (
@@ -61,8 +64,9 @@ export function ReplayDialog({
         projectId={projectId}
         event={event}
         endpoints={endpoints}
-        urlAvailable={urlAvailable}
+        urlAvailable={urlAvailable && !demo}
         urlEnabled={urlEnabled}
+        demo={demo}
       />
     </Dialog>
   ) : null
@@ -76,6 +80,7 @@ function ReplayForm({
   endpoints,
   urlAvailable,
   urlEnabled = urlAvailable,
+  demo = false,
 }: Omit<Props, 'open'>) {
   const sinks = useMemo(
     () => endpoints.filter((e) => e.enabled && e.id !== event.endpoint_id),
@@ -178,7 +183,11 @@ function ReplayForm({
             URL
           </label>
         </div>
-        {!urlEnabled ? (
+        {demo ? (
+          <p className="text-xs text-muted-foreground">
+            Demo workspaces replay to their test sink only, so nothing leaves RelayLab.
+          </p>
+        ) : !urlEnabled ? (
           <p className="text-xs text-muted-foreground">
             Sending to a URL is turned off on this RelayLab server. The test sink still works.
           </p>

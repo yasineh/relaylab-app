@@ -77,6 +77,10 @@ export type Me = {
   email: string
   name: string
   email_verified: boolean
+  /** A demo workspace user (anonymous, synthetic data, sink-only replay). */
+  is_demo?: boolean
+  /** When the demo workspace and its data are deleted (demo users only). */
+  demo_expires_at?: string
 }
 
 /** GET /api/v1/config: public settings the UI needs before sign-in. */
@@ -89,6 +93,8 @@ export type PublicConfig = {
   replay_url_available?: boolean
   /** How long events are kept (add-event-retention). event_ttl_seconds 0: not deleted by age. */
   retention?: { event_ttl_seconds: number; max_events_per_project: number }
+  /** DEMO_ENABLED: offer "Try the demo". */
+  demo_enabled?: boolean
 }
 
 export const fetchMe = (signal?: AbortSignal) => apiFetch<Me>('/api/v1/me', { signal })

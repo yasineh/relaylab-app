@@ -9,7 +9,7 @@ import { VisibleText } from '@/features/events/payload/RawText'
 import { stateLabel, useEventReplays, type Replay } from '@/features/replay/api'
 import { ReplayDialog } from '@/features/replay/ReplayDialog'
 import { ReplayStateBadge } from '@/features/replay/ReplayStateBadge'
-import { configQueryKey, usePublicConfig } from '@/hooks/session'
+import { configQueryKey, useMe, usePublicConfig } from '@/hooks/session'
 import { formatPreciseDateTime } from '@/lib/format'
 
 /** The event detail's replay entry point and the event's recent replays. */
@@ -22,6 +22,7 @@ export function EventReplayPanel({
 }) {
   const client = useQueryClient()
   const config = usePublicConfig()
+  const me = useMe()
   const endpoints = useEndpoints(projectId)
   const replays = useEventReplays(projectId, event.id)
   const [open, setOpen] = useState(false)
@@ -87,6 +88,7 @@ export function EventReplayPanel({
         endpoints={endpoints.data ?? []}
         urlAvailable={config.data?.replay_url_available === true}
         urlEnabled={urlEnabled}
+        demo={me.data?.is_demo === true}
       />
     </section>
   )

@@ -1,3 +1,4 @@
+import { anonymousClient } from 'better-auth/client/plugins'
 import { createAuthClient } from 'better-auth/react'
 
 /**
@@ -15,6 +16,8 @@ export const authClient = createAuthClient({
     // Resolve fetch at call time (not when this module loads) so tests can intercept it.
     customFetchImpl: (input, init) => globalThis.fetch(input, init),
   },
+  // Demo workspaces: "Try the demo" signs in as an anonymous user.
+  plugins: [anonymousClient()],
 })
 
 /** Error shape returned by Better Auth client calls. */

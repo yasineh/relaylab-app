@@ -4,6 +4,7 @@ import { Link, NavLink, Outlet, useNavigate } from 'react-router'
 
 import logoIcon from '@/assets/brand/logo-icon.svg'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { DemoBanner } from '@/features/demo/DemoBanner'
 import { useMe, usePublicConfig } from '@/hooks/session'
 import { authClient } from '@/lib/auth-client'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,7 @@ export function AppShell() {
           <AccountNav />
         </div>
       </header>
+      <DemoBanner />
       <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-10">
         <Outlet />
       </main>

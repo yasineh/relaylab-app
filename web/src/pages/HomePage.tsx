@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { CircleAlert, CircleCheck, Loader2 } from 'lucide-react'
 
+import { TryDemoButton } from '@/features/demo/TryDemo'
+import { useMe, usePublicConfig } from '@/hooks/session'
 import { fetchReadiness } from '@/lib/api'
 
 export function HomePage() {
@@ -13,8 +15,28 @@ export function HomePage() {
           running; projects, endpoints, and the event explorer arrive in upcoming releases.
         </p>
       </section>
+      <TryDemo />
       <SystemStatus />
     </div>
+  )
+}
+
+/** Visitors without an account can try RelayLab in a demo workspace (when DEMO_ENABLED). */
+function TryDemo() {
+  const config = usePublicConfig()
+  const me = useMe()
+  if (!config.data?.demo_enabled || me.isPending || me.data) return null
+  return (
+    <section aria-labelledby="demo-heading" className="max-w-2xl space-y-3 rounded-lg border bg-card p-5">
+      <h2 id="demo-heading" className="font-semibold">
+        Try it without an account
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        Get a demo workspace with sample webhooks to inspect and replay. It uses synthetic data and is deleted
+        after 24 hours.
+      </p>
+      <TryDemoButton />
+    </section>
   )
 }
 

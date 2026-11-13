@@ -120,6 +120,8 @@ var unrelatedConstants = map[string]map[string]bool{
 	filepath.Join("internal", "events", "service.go"): {"contentTypeFilterMaxChars": true},
 	// Outbound response header cap from the outbound-request-guard spec, not the inbound header limit.
 	filepath.Join("internal", "replay", "outbound", "client.go"): {"MaxResponseHeaderBytes": true},
+	// Replay header override count from the event-replay spec, not a project limit.
+	filepath.Join("internal", "replay", "build.go"): {"MaxOverrides": true},
 	// Test-helper retry count for shared-catalog DDL, not a stream limit.
 	filepath.Join("internal", "platform", "db", "dbtest", "dbtest.go"): {"concurrentUpdateAttempts": true},
 }

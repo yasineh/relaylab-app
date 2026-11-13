@@ -23,7 +23,7 @@ func TestReplayDefaultsByEnvironment(t *testing.T) {
 	}
 	want := Replay{
 		Enabled: true, ProjectConcurrency: 2, ProjectQueueDepth: 20, UserRatePerMinute: 30, MaxTries: 3,
-		LeaseSeconds: 60, MaxLeaseLosses: 3, ResponseExcerptBytes: 64 << 10,
+		LeaseSeconds: 60, MaxLeaseLosses: 3, ResponseExcerptBytes: 64 << 10, HistoryPageDefault: 25,
 	}
 	got := *dev
 	got.OverrideKey = Secret{}
@@ -93,8 +93,13 @@ func TestReplayLimitsNotHardCoded(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		rel, _ := filepath.Rel(root, path)
+		allowed := unrelatedConstants[rel]
 		ast.Inspect(f, func(n ast.Node) bool {
 			if isDuration(n) {
+				return false
+			}
+			if vs, ok := n.(*ast.ValueSpec); ok && len(vs.Names) == 1 && allowed[vs.Names[0].Name] {
 				return false
 			}
 			if v, ok := constInt(n); ok {

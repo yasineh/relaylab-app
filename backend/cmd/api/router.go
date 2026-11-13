@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
 	"relaylab/internal/projects"
+	"relaylab/internal/replay"
 )
 
 type routerDeps struct {
@@ -27,6 +29,8 @@ type routerDeps struct {
 	projects  *projects.Handler
 	endpoints *endpoints.Handler
 	events    *events.Handler
+	replay    *replay.Handler    // nil in tests that do not need it
+	replayCfg replayAvailability // nil: replay reported unavailable
 	ingestion *ingestion.Handler // public /h/{token}; never reads the session
 	web       http.Handler       // embedded SPA; nil when not built
 }
@@ -74,12 +78,21 @@ func newRouter(d routerDeps) http.Handler {
 			)
 			v1.NotFound(httpx.NotFound)
 			v1.MethodNotAllowed(httpx.MethodNotAllowed)
-			v1.Get("/config", publicConfig(d.auth))
+			v1.Get("/config", publicConfig(d.auth, d.replayCfg))
 			v1.Get("/me", identity.Me)
 			v1.Route("/projects", func(pr chi.Router) {
 				d.projects.Routes(pr)
 				pr.Route("/{projectId}/endpoints", d.endpoints.Routes)
-				pr.Route("/{projectId}/events", d.events.Routes)
+				pr.Route("/{projectId}/events", func(er chi.Router) {
+					d.events.Routes(er)
+					if d.replay != nil {
+						er.Route("/{eventId}/replays", d.replay.EventRoutes)
+					}
+				})
+				if d.replay != nil {
+					pr.Route("/{projectId}/replays", d.replay.ProjectRoutes)
+					pr.Route("/{projectId}/audit-log", d.replay.AuditRoutes)
+				}
 			})
 		})
 	})
@@ -111,18 +124,34 @@ func unlessPublic(mw func(http.Handler) http.Handler) func(http.Handler) http.Ha
 }
 
 // publicConfigResponse is the body of GET /api/v1/config. It contains no user
-// data; later changes add retention and replay settings.
+// data; later changes add retention settings.
 type publicConfigResponse struct {
 	SignupEnabled             bool `json:"signup_enabled"`
 	EmailVerificationRequired bool `json:"email_verification_required"`
+	// ReplayEnabled is REPLAY_ENABLED; ReplayURLAvailable also requires a
+	// recent worker heartbeat with an active outbound guard. Sink replays
+	// need only ReplayEnabled.
+	ReplayEnabled      bool `json:"replay_enabled"`
+	ReplayURLAvailable bool `json:"replay_url_available"`
 }
 
-func publicConfig(a *config.Auth) http.HandlerFunc {
-	body := publicConfigResponse{
-		SignupEnabled:             a.SignupEnabled,
-		EmailVerificationRequired: a.RequireEmailVerification,
-	}
-	return func(w http.ResponseWriter, _ *http.Request) {
+// replayAvailability is the replay gate as the config route needs it.
+type replayAvailability interface {
+	Enabled() bool
+	URLAvailable(ctx context.Context) (bool, error)
+}
+
+func publicConfig(a *config.Auth, replayGate replayAvailability) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body := publicConfigResponse{
+			SignupEnabled:             a.SignupEnabled,
+			EmailVerificationRequired: a.RequireEmailVerification,
+		}
+		if replayGate != nil {
+			body.ReplayEnabled = replayGate.Enabled()
+			// A heartbeat read error reports URL replay unavailable (fail closed).
+			body.ReplayURLAvailable, _ = replayGate.URLAvailable(r.Context())
+		}
 		w.Header().Set("Cache-Control", "no-store")
 		httpx.WriteJSON(w, http.StatusOK, body)
 	}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"relaylab/internal/platform/config"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -61,7 +63,8 @@ func TestPublicConfigWithoutSession(t *testing.T) {
 	}
 	var body map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
-	if len(body) != 2 || body["signup_enabled"] != true || body["email_verification_required"] != true {
+	if len(body) != 4 || body["signup_enabled"] != true || body["email_verification_required"] != true ||
+		body["replay_enabled"] != false || body["replay_url_available"] != false {
 		t.Fatalf("config = %v", body)
 	}
 	// Only GET is public; anything else on the path still needs a session.
@@ -167,5 +170,24 @@ func TestPublicRoutesIgnoreSessionCookie(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code == http.StatusUnauthorized {
 		t.Fatal("/h/* must not depend on the session cookie")
+	}
+}
+
+type fakeReplayGate struct{ enabled, url bool }
+
+func (g fakeReplayGate) Enabled() bool { return g.enabled }
+
+func (g fakeReplayGate) URLAvailable(context.Context) (bool, error) { return g.url, nil }
+
+func TestPublicConfigReportsReplayAvailability(t *testing.T) {
+	a := &config.Auth{SignupEnabled: true}
+	for _, g := range []fakeReplayGate{{true, true}, {true, false}, {false, false}} {
+		rec := httptest.NewRecorder()
+		publicConfig(a, g)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+		var body map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &body)
+		if body["replay_enabled"] != g.enabled || body["replay_url_available"] != g.url {
+			t.Errorf("gate %+v: config %v", g, body)
+		}
 	}
 }

@@ -35,6 +35,8 @@ import (
 	"relaylab/internal/platform/redact"
 	"relaylab/internal/projects"
 	"relaylab/internal/realtime"
+	"relaylab/internal/replay"
+	"relaylab/internal/replay/outbound"
 )
 
 func main() {
@@ -93,6 +95,26 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	replayCfg, err := config.LoadReplay(os.Getenv, cfg.Env)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
+	outCfg, err := config.LoadOutbound(os.Getenv, cfg)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
+	var sealer *replay.Sealer
+	if replayCfg.OverrideKey.Reveal() != "" {
+		if sealer, err = replay.NewSealer([]byte(replayCfg.OverrideKey.Reveal())); err != nil {
+			logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+				Error("invalid replay override key", slog.String("error", err.Error()))
+			return 1
+		}
+	}
 	tokenKeys, err := token.NewKeys(endpointCfg.HMACKey(), endpointCfg.EncKey(), 1)
 	if err != nil {
 		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
@@ -150,6 +172,11 @@ func runServer() int {
 	broker := realtime.NewBroker(realtime.Options{Source: listener, Logger: logger, OnSlowDrop: streamMetrics.SlowDrop})
 	go broker.Run(ctx)
 	validator := identity.NewValidator(authCfg, store.New(pool))
+	replayGate := replay.NewGate(replayCfg.Enabled, store.New(pool))
+	replayHandler := replay.NewHandler(
+		replay.NewService(pool, redactor, replayGate, outbound.NewValidator(outbound.OptionsFrom(outCfg, "", nil, nil)),
+			sealer, replayCfg, replay.NewRateLimiter(replayCfg.UserRatePerMinute)),
+		replay.NewReads(pool, redactor), replayCfg.HistoryPageDefault, cfg.Limits.PageMax)
 	streamsDone := make(chan struct{})
 
 	handler := newRouter(routerDeps{
@@ -177,6 +204,8 @@ func runServer() int {
 				Shutdown:        streamsDone,
 			}),
 		ingestion: ingestHandler,
+		replay:    replayHandler,
+		replayCfg: replayGate,
 		web:       webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)

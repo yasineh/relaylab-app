@@ -28,6 +28,9 @@ type Replay struct {
 	MaxLeaseLosses int
 	// ResponseExcerptBytes caps the stored response body.
 	ResponseExcerptBytes int
+	// HistoryPageDefault is the replay history and activity page size when a
+	// request sends no limit (the maximum is LIMIT_PAGE_MAX).
+	HistoryPageDefault int
 	// OverrideKey encrypts header override values at rest (AES-256-GCM,
 	// REPLAY_OVERRIDE_ENC_KEY). Required when replay is enabled.
 	OverrideKey Secret
@@ -49,6 +52,7 @@ var replaySpecs = []replaySpec{
 	{"REPLAY_LEASE_SECONDS", 60, 15, 3600, func(r *Replay) *int { return &r.LeaseSeconds }},
 	{"REPLAY_MAX_LEASE_LOSSES", 3, 1, 20, func(r *Replay) *int { return &r.MaxLeaseLosses }},
 	{"REPLAY_RESPONSE_EXCERPT_BYTES", 64 << 10, 1, 256 << 10, func(r *Replay) *int { return &r.ResponseExcerptBytes }},
+	{"REPLAY_HISTORY_PAGE_DEFAULT", 25, 1, 100, func(r *Replay) *int { return &r.HistoryPageDefault }},
 }
 
 // LoadReplay reads REPLAY_ENABLED, the REPLAY_* limits, and

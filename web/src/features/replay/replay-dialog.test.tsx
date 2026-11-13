@@ -123,7 +123,9 @@ describe('replay availability (6.1)', () => {
     withReplay({}, { enabled: false, url: false })
     const dialog = await openDialog()
     expect(within(dialog).getByRole('radio', { name: 'URL' })).toBeDisabled()
-    expect(within(dialog).getByText(/Sending to a URL is turned off on this RelayLab server/)).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/Sending to a URL is turned off on this RelayLab server/),
+    ).toBeInTheDocument()
     expect(within(dialog).getByRole('radio', { name: 'Test sink' })).toBeChecked()
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Send replay' })).toBeEnabled())
   })

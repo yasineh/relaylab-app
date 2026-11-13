@@ -12,14 +12,14 @@ flowchart LR
     vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
     subgraph image["relaylab image (distroless, nonroot)"]
       api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/api/v1/projects/{id}/events/stream (SSE, session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build<br/>realtime broker: one LISTEN connection per instance"]
-      worker["worker<br/>/healthz, /readyz (outbound_guard), /metrics on :8081<br/>replay job runner (SKIP LOCKED leases)<br/>outbound guard + heartbeat every 15 s"]
+      worker["worker<br/>/healthz, /readyz (outbound_guard), /metrics on :8081<br/>replay job runner (SKIP LOCKED leases)<br/>outbound guard + heartbeat every 15 s<br/>retention purge every 10 min (advisory lock)"]
       migrate["api migrate<br/>(one-shot, goose)"]
     end
     subgraph authimg["relaylab-auth image (Node 24)"]
-      auth["auth: Better Auth 1.7.18<br/>:3001, internal network only"]
+      auth["auth: Better Auth 1.7.18<br/>:3001, internal network only<br/>prunes stale rateLimit rows"]
       authmigrate["auth migrate<br/>(one-shot, runs first)"]
     end
-    pg[("PostgreSQL 17<br/>schema app: projects, endpoints, webhook_events,<br/>audit_log, goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
+    pg[("PostgreSQL 17<br/>schema app: projects, endpoints, webhook_events,<br/>replay_attempts, jobs, worker_heartbeats,<br/>audit_log, goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
     mailpit["Mailpit<br/>SMTP :1025, inbox :8025"]
   end
 
@@ -32,7 +32,7 @@ flowchart LR
   browser -.->|"production layout: api serves the SPA"| api
   api -->|"/api/auth/* + shared proxy header"| auth
   api -->|"app_runtime: DML on app,<br/>SELECT auth.session, auth.user"| pg
-  worker -->|"app_runtime: claim jobs, record results,<br/>heartbeat, sink events"| pg
+  worker -->|"app_runtime: claim jobs, record results,<br/>heartbeat, sink events, retention deletes"| pg
   api -->|"create replay + job + audit (one tx),<br/>NOTIFY replay_jobs"| pg
   dest["Replay destination<br/>(public internet only)"]
   worker -->|"HTTPS through the outbound guard:<br/>public addresses only, no redirects"| dest
@@ -98,6 +98,11 @@ fall back to the web app when it is embedded.
   events through the ingestion insert path. Credential and signature headers
   are never forwarded; values users add are encrypted until delivery.
   Details: [Outbound requests](../security/outbound-replay.md).
+- **Retention**: one worker at a time (Postgres advisory lock) deletes events
+  past `RETENTION_EVENT_TTL` or beyond the per-project cap, old audit entries,
+  and finished jobs, in batches of at most 1,000 rows. The worker has no write
+  access to the `auth` schema; the auth service prunes its own rate-limit
+  rows. Details: [Data retention and deletion](../security/data-retention.md).
 
 In production (prepared by `add-production-readiness`), the auth service runs
 as a sidecar in the same Cloud Run service as the API, so `AUTH_SERVICE_URL`

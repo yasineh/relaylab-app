@@ -42,6 +42,7 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 - [Authentication and sessions](docs/security/authentication.md)
 - [Received events](docs/security/events.md)
 - [Outbound requests and SSRF protections](docs/security/outbound-replay.md)
+- [Data retention and deletion](docs/security/data-retention.md)
 - [MVP plan and decisions](docs/plan/mvp-plan.md)
 - [Specifications](openspec/): planned changes live in `openspec/changes/`
 

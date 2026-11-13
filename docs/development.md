@@ -156,6 +156,15 @@ Replay, read by the API and the worker ([details](security/outbound-replay.md#re
 | `REPLAY_MAX_TRIES`, `REPLAY_LEASE_SECONDS`, `REPLAY_MAX_LEASE_LOSSES` | 3, 60, 3 | Deliveries per replay, worker lease, lease expiries before a job is abandoned (`worker_lost`) |
 | `REPLAY_RESPONSE_EXCERPT_BYTES`, `REPLAY_HISTORY_PAGE_DEFAULT` | 65536, 25 | Stored response body (at most 262144); replay history and activity page size |
 
+Data retention, read by the worker (purge) and the API (reported in `GET /api/v1/config`) ([details](security/data-retention.md)):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `RETENTION_EVENT_TTL` | `168h` | Events and their replays older than this are deleted. Go durations (no `d` unit); `24h` for a public demo. `0` turns off deletion by age outside production |
+| `RETENTION_MAX_EVENTS_PER_PROJECT` | 10000 | Oldest events beyond this many per project are deleted on each run |
+| `RETENTION_AUDIT_TTL`, `RETENTION_JOB_TTL` | `2160h`, `168h` | Audit log entries; finished (done or dead) jobs |
+| `RETENTION_INTERVAL` | `10m` | Time between purge runs (1m to 24h) |
+
 Outbound requests (replay destinations), read by the worker ([details](security/outbound-replay.md)):
 
 | Variable | Default | Notes |

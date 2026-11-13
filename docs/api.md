@@ -61,13 +61,22 @@ while signed out.
 Public settings the web app needs before sign-in. No authentication. Contains no user data.
 
 ```json
-{ "signup_enabled": true, "email_verification_required": true }
+{
+  "signup_enabled": true,
+  "email_verification_required": true,
+  "replay_enabled": true,
+  "replay_url_available": true,
+  "retention": { "event_ttl_seconds": 604800, "max_events_per_project": 10000 }
+}
 ```
 
 | Field | Meaning |
 |---|---|
 | `signup_enabled` | Whether public sign-up is open (`AUTH_SIGNUP_ENABLED`) |
 | `email_verification_required` | Whether users must verify their email before signing in (`AUTH_REQUIRE_EMAIL_VERIFICATION`) |
+| `replay_enabled`, `replay_url_available` | Replay availability; see [Replays](#replays) |
+| `retention.event_ttl_seconds` | How long events are kept (`RETENTION_EVENT_TTL`). `0` means events are not deleted by age, which only development allows |
+| `retention.max_events_per_project` | Events kept per project before the oldest are deleted (`RETENTION_MAX_EVENTS_PER_PROJECT`) |
 
 ### `GET /api/v1/me`
 
@@ -192,7 +201,7 @@ never contain the token or URL. Request logs record the route pattern
 
 ### Events
 
-Received webhooks of a project, read-only. Every route requires a session and
+Received webhooks of a project. They can be read and deleted, never changed. Every route requires a session and
 only returns events of projects the caller owns. Another user's project or
 event, a project or event that does not exist, and a malformed id all give the
 same `404 not_found`. Responses are `Cache-Control: no-store`.
@@ -300,6 +309,36 @@ The exact body bytes as a download: `Content-Type: application/octet-stream`,
 `Content-Disposition: attachment; filename="event-{id}.bin"`,
 `X-Content-Type-Options: nosniff`, and `Content-Security-Policy: sandbox`, so
 a browser never renders it, even when the sender declared `text/html`.
+
+#### `DELETE /api/v1/projects/{projectId}/events/{eventId}`
+
+Permanently deletes the event and its replay attempts. There is no undo.
+Returns `204` with no body. Events the caller can't see, including an event
+under a different project id, give `404 not_found`. Events that a replay
+delivered to a test sink are separate events and stay; their link to the
+deleted replay is cleared.
+
+#### `DELETE /api/v1/projects/{projectId}/endpoints/{endpointId}/events`
+
+Permanently deletes every event the endpoint received, with their replay
+attempts. The endpoint and its URL stay. Returns `200`:
+
+```json
+{ "deleted": 120 }
+```
+
+The server deletes in batches of 1,000 for up to 30 seconds per request. If
+events remain, `deleted` is what went so far: repeat the request until it
+returns `{"deleted": 0}` (the web app does this). An endpoint the caller can't
+see gives `404 not_found`.
+
+```sh
+curl -X DELETE "$APP_ORIGIN/api/v1/projects/$PROJECT_ID/endpoints/$ENDPOINT_ID/events" \
+  -b "$SESSION_COOKIE" -H "Origin: $APP_ORIGIN"
+```
+
+Events are also deleted automatically after the retention period; see
+[Data retention](security/data-retention.md).
 
 #### `GET /api/v1/projects/{projectId}/events/stream`
 

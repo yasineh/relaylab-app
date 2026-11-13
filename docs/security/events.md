@@ -76,7 +76,7 @@ user agents, and bodies.
 
 ## Retention and deletion
 
-Events are deleted with their endpoint or project (database cascade). Deleting
-an account deletes its projects, and with them their events. A configurable
-retention period is added by a later change (`add-event-retention`). Until
-then, events are kept until the endpoint or project is deleted.
+Events are deleted automatically after the retention period (7 days by
+default), beyond a per-project cap (10,000 by default), and with their endpoint
+or project (database cascade). Owners can also delete one event or clear an
+endpoint's events. See [Data retention and deletion](data-retention.md).

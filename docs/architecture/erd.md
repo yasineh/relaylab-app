@@ -270,8 +270,14 @@ never stored; the body is stored exactly as received.
 
 Indexes: `webhook_events_project_id_idx (project_id, id DESC)` for the project
 feed and cursor, `webhook_events_endpoint_id_idx (endpoint_id, id DESC)`,
-`webhook_events_project_method_idx (project_id, method, id DESC)`, and
-`webhook_events_project_received_idx (project_id, received_at)` for retention.
+`webhook_events_project_method_idx (project_id, method, id DESC)`,
+`webhook_events_project_received_id_idx (project_id, received_at, id)` for the
+retention cap and live-stream resume, `webhook_events_received_idx
+(received_at)` for the retention age purge, and
+`webhook_events_replay_attempt_idx (replay_attempt_id) WHERE replay_attempt_id
+IS NOT NULL`, which keeps clearing sink references cheap when replays are
+deleted. The retention indexes are added by `00006_retention.sql`, which
+replaced the earlier `(project_id, received_at)` index.
 `webhook_events_id_project_key` (unique `(id, project_id)`, added by
 `00005_replay.sql`) is the target of the `replay_attempts` composite foreign key.
 
@@ -292,7 +298,9 @@ secrets, or payloads.
 | `metadata` | jsonb, not null | A JSON object; for endpoints only the id and name |
 | `created_at` | timestamptz, not null | Default `now()` |
 
-Index: `audit_log_project_created_idx (project_id, created_at DESC, id DESC)`.
+Indexes: `audit_log_project_created_idx (project_id, created_at DESC, id DESC)`
+and `audit_log_created_idx (created_at)` for the retention purge
+(`00006_retention.sql`).
 
 ### `app.replay_attempts`
 
@@ -356,7 +364,8 @@ lease holder may finish a job.
 Indexes: `jobs_queued_run_at_idx (run_at) WHERE state = 'queued'`,
 `jobs_project_state_idx (project_id, state)` for per-project concurrency, and
 `jobs_running_lease_idx (lease_expires_at) WHERE state = 'running'` for the
-reaper.
+reaper, and `jobs_finished_updated_idx (updated_at) WHERE state IN ('done',
+'dead')` for the retention purge (`00006_retention.sql`).
 
 ### `app.worker_heartbeats`
 
@@ -413,13 +422,13 @@ or restore.
 
 - **Projects**: kept until the owner deletes them (type-to-confirm in project settings) or deletes their account.
 - **Endpoints**: kept until the owner deletes the endpoint (type-to-confirm) or its project. Deleting an endpoint removes its events and, through them, their replays; replays that used it as a sink are kept with `sink_endpoint_id` cleared. Rotating its token keeps everything.
-- **Webhook events**: kept until their endpoint or project is deleted (by cascade). An age-based retention purge is planned in `add-event-retention`; until then events have no automatic expiry. Credential header and query values are never stored.
-- **Replay attempts**: kept until their event or project is deleted (by cascade). Header override values are erased (ciphertext set to null) as soon as the replay is terminal; response excerpts are kept with the replay.
-- **Jobs**: deleted with their project, including queued and running ones; a worker whose rows disappear mid-run stops without writing. Finished (`done`, `dead`) rows have no automatic expiry yet; purging them is planned in `add-event-retention`.
+- **Webhook events**: deleted by the worker's retention purge once older than `RETENTION_EVENT_TTL` (default 7 days) and beyond `RETENTION_MAX_EVENTS_PER_PROJECT` (default 10,000, oldest first), by the owner (one event, or all of an endpoint's), and with their endpoint or project (by cascade). Credential header and query values are never stored. See [Data retention and deletion](../security/data-retention.md).
+- **Replay attempts**: deleted with their event, by every path above, or their project (by cascade). Sink events they created stay, with `replay_attempt_id` cleared (`ON DELETE SET NULL`). Header override values are erased (ciphertext set to null) as soon as the replay is terminal; response excerpts are kept with the replay.
+- **Jobs**: deleted with their project, including queued and running ones; a worker whose rows disappear mid-run stops without writing. Finished (`done`, `dead`) rows are purged after `RETENTION_JOB_TTL` (default 7 days); queued and running jobs never expire by age. The purge also removes non-running jobs whose project or replay no longer exists (a safety net that normally finds nothing).
 - **Worker heartbeats**: one row per worker; rows not updated for a day are deleted by running workers.
-- **Audit log**: kept with its project and deleted with it. If the actor's account is deleted, `actor_user_id` becomes `NULL` (in practice the actor's projects, and so these rows, are deleted too).
+- **Audit log**: purged after `RETENTION_AUDIT_TTL` (default 90 days), and deleted with its project. If the actor's account is deleted, `actor_user_id` becomes `NULL` (in practice the actor's projects, and so these rows, are deleted too).
 
 - **Accounts**: kept until the user deletes their account (Account settings → Delete account), which removes the `user` row and, by cascade, its sessions, credentials, and projects (with their endpoints, events, and audit entries).
 - **Sessions**: deleted on sign-out, sign-out everywhere, password change (other sessions), password reset (all sessions), and account deletion. Expired rows are rejected immediately but remain in the table until Better Auth removes them.
 - **Verification and reset tokens**: single use; they expire after 24 hours and 1 hour respectively.
-- **Rate-limit counters**: the only place a full IP address is stored (webhook events keep only a truncated prefix). Pruning old rows (by the auth service, which owns the schema) is planned in `add-event-retention`.
+- **Rate-limit counters**: the only place a full IP address is stored (webhook events keep only a truncated prefix). The auth service, which owns the schema, deletes rows whose last request is older than the longest rate-limit window (one hour) every 10 minutes.

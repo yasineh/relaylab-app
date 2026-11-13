@@ -21,6 +21,8 @@
     "build": "pnpm --filter @relaylab/web build && pnpm --filter @relaylab/backend build:embed",
     "test": "pnpm -r test",
     "test:contract": "./backend/scripts/auth-contract.sh",
+    "e2e": "pnpm --filter @relaylab/e2e stack:up && pnpm --filter @relaylab/e2e e2e",
+    "e2e:down": "pnpm --filter @relaylab/e2e stack:down",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "format": "pnpm -r format",

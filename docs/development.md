@@ -99,9 +99,10 @@ If a port is taken on your machine, change it in `.env`:
 | `pnpm create-user -- --email … --name …` | Create a verified account; password from stdin |
 | `pnpm test` | Web tests, auth service tests, and Go unit + integration tests (including the auth contract tests when Node and `pnpm install` are available) |
 | `pnpm test:contract` | Only the auth contract and auth-schema tests (real auth service + Go proxy and validator) |
-| `pnpm lint` | oxlint for web and auth; `go vet`, gofmt, golangci-lint, and sqlc drift for backend |
-| `pnpm typecheck` | TypeScript for web and auth |
-| `pnpm format` / `pnpm format:check` | Prettier for web and auth; gofmt for backend |
+| `pnpm e2e` / `pnpm e2e:down` | Build and start the end-to-end stack and run the Playwright suite; stop it ([Testing](development/testing.md)) |
+| `pnpm lint` | oxlint for web, auth, and e2e; `go vet`, gofmt, golangci-lint, and sqlc drift for backend |
+| `pnpm typecheck` | TypeScript for web, auth, and e2e |
+| `pnpm format` / `pnpm format:check` | Prettier for web, auth, and e2e; gofmt for backend |
 | `pnpm build` | Production web build and an API binary that embeds it (`backend/bin/`) |
 | `pnpm check` | Format check, lint, typecheck, tests and build: run before pushing |
 | `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
@@ -257,6 +258,9 @@ The contract tests need Node.js and `pnpm install`. They skip without them,
 unless `RELAYLAB_REQUIRE_AUTH=1` (set by `pnpm test:contract` and the CI
 `auth-contract` job).
 
+The browser end-to-end suite (`pnpm e2e`) runs against a separate Docker
+Compose stack; see [Testing](development/testing.md).
+
 ## Logging and errors
 
 - Logs are one JSON object per line with UTC timestamps, `service`, `env`, and
@@ -289,6 +293,7 @@ auth/                               Better Auth service (Node 24, TypeScript)
   src/                              server, Better Auth config, mailer, migrate, CLIs
   test/                             integration tests against a real database
 web/                                React + TypeScript + Vite app
+e2e/                                Playwright end-to-end suite and its echo destination
 deploy/                             roles.sql and local Postgres init
 openspec/                           specifications and planned changes
 docs/                               documentation

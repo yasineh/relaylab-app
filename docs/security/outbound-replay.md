@@ -180,6 +180,27 @@ a test that doesn't exist.
   outcome, tries, and duration; never bodies, header values, or query strings.
   The audit log records `replay.created` with the destination host only.
 
+## Test-only allowlist
+
+`REPLAY_TEST_ALLOWLIST` exists only so the end-to-end suite can replay to a
+controlled echo service on its private Docker network
+(`docker-compose.e2e.yml` sets `echo:8080`). It is a deliberate hole in the
+guard, so it is narrow and refused where it matters:
+
+- The api and the worker refuse to start when it is set and `APP_ENV=production`.
+- Entries are exact `host:port` pairs with DNS names. IP literals, RelayLab's
+  own hosts (`APP_ORIGIN`, `INGEST_BASE_URL`), the database hosts, and the
+  metadata names are rejected.
+- Only a URL with that exact host and port is let through, over HTTP or HTTPS.
+  Any other port, name, or IP literal gets the normal rules.
+- At dial time the guard admits exactly the addresses that name resolved to,
+  at that port. Every other socket is still checked by the IP policy.
+- The worker logs a warning at startup listing the allowed destinations.
+
+Tests: `TestTestAllowlistRefusedInProduction`, `TestTestAllowlistParsing`,
+`TestTestAllowlistAdmitsOnlyTheListedDestination`, and
+`TestValidatorAcceptsAllowlistedTestDestination`.
+
 ## Operating notes
 
 - **Keep the range table current.** When IANA updates its IPv4 or IPv6

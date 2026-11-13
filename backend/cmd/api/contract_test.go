@@ -379,3 +379,24 @@ func flipChar(b byte) string {
 	}
 	return "A"
 }
+
+// Demo workspaces (add-production-readiness 4.1): an anonymous sign-in on the
+// real auth service yields a session the Go validator accepts as a demo user,
+// although demo users have no verified email.
+func TestContractAnonymousDemoSession(t *testing.T) {
+	e := newContractEnv(t, "DEMO_ENABLED=true")
+	r := e.do(http.MethodPost, "/api/auth/sign-in/anonymous", "{}", "", "203.0.113.70")
+	if r.status != http.StatusOK {
+		t.Fatalf("anonymous sign-in: %d %s", r.status, r.body)
+	}
+	cookie := sessionCookie(r)
+	me := e.do(http.MethodGet, "/api/v1/me", "", cookie, "203.0.113.70")
+	if me.status != http.StatusOK || !strings.Contains(me.body, `"is_demo":true`) || !strings.Contains(me.body, `"demo_expires_at":`) {
+		t.Fatalf("me: %d %s", me.status, me.body)
+	}
+
+	off := newContractEnv(t, "DEMO_ENABLED=false")
+	if r := off.do(http.MethodPost, "/api/auth/sign-in/anonymous", "{}", "", "203.0.113.71"); r.status != http.StatusNotFound {
+		t.Fatalf("demo disabled: %d %s", r.status, r.body)
+	}
+}

@@ -18,12 +18,15 @@ export function Dialog({
   title,
   description,
   children,
+  size = 'md',
 }: {
   open: boolean
   onClose: () => void
   title: string
   description?: ReactNode
   children: ReactNode
+  /** lg suits dialogs with tables or previews. */
+  size?: 'md' | 'lg'
 }) {
   const titleId = useId()
   const descId = useId()
@@ -77,7 +80,7 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
-        className="relative m-0 w-full max-w-md rounded-lg border bg-card p-6 text-card-foreground shadow-lg"
+        className={`relative m-0 max-h-[90vh] w-full overflow-y-auto rounded-lg border bg-card p-6 text-card-foreground shadow-lg ${size === 'lg' ? 'max-w-2xl' : 'max-w-md'}`}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="space-y-1">

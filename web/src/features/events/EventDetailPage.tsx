@@ -18,6 +18,7 @@ import { JsonTree } from '@/features/events/payload/JsonTree'
 import { RawText, VisibleText } from '@/features/events/payload/RawText'
 import { REDACTION_NOTE, RedactedMarker } from '@/features/events/RedactedMarker'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
+import { EventReplayPanel } from '@/features/replay/EventReplayPanel'
 import { isApiError } from '@/lib/api'
 import { formatPreciseDateTime } from '@/lib/format'
 
@@ -90,6 +91,8 @@ function EventView({ projectId, event: e }: { projectId: string; event: EventDet
       </div>
 
       <ReproduceCurl projectId={projectId} event={e} />
+
+      <EventReplayPanel projectId={projectId} event={e} />
 
       <Alert tone="info">
         <p>

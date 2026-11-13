@@ -83,6 +83,10 @@ export type Me = {
 export type PublicConfig = {
   signup_enabled: boolean
   email_verification_required: boolean
+  /** REPLAY_ENABLED on the server. */
+  replay_enabled?: boolean
+  /** URL replay also needs a worker reporting an active outbound guard. */
+  replay_url_available?: boolean
 }
 
 export const fetchMe = (signal?: AbortSignal) => apiFetch<Me>('/api/v1/me', { signal })

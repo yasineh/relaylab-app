@@ -49,10 +49,10 @@ describe('event detail (4.2)', () => {
       'href',
       `/projects/${PID}/endpoints/${summary().endpoint_id}`,
     )
-    expect(screen.getByRole('status')).toHaveTextContent(/confidential or personal data/)
-    expect(screen.getByRole('status')).toHaveTextContent(
-      '2 credential values were removed when the request arrived.',
-    )
+    const banner = screen
+      .getAllByRole('status')
+      .find((el) => /confidential or personal data/.test(el.textContent ?? ''))
+    expect(banner).toHaveTextContent('2 credential values were removed when the request arrived.')
     const panel = screen.getByRole('tabpanel')
     expect(within(panel).getByText('203.0.113.0/24')).toBeInTheDocument()
     expect(within(panel).getByText('req-123')).toBeInTheDocument()

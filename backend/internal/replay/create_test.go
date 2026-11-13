@@ -117,7 +117,7 @@ func TestCreateUnavailable(t *testing.T) {
 		expectError(t, off.alice.Do(http.MethodPost, off.eventPath(off.event), body(in)), 503, "replay_unavailable")
 	}
 	e := newAPIEnv(t, apiOpts{})
-	e.status.active = false
+	e.status.setActive(false)
 	expectError(t, e.alice.Do(http.MethodPost, e.eventPath(e.event), body(urlDest("https://example.com/"))), 503, "replay_unavailable")
 	if n := e.count("app.replay_attempts") + off.count("app.replay_attempts"); n != 0 {
 		t.Fatalf("%d replays created while unavailable", n)

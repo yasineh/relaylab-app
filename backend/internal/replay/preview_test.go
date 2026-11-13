@@ -101,7 +101,7 @@ func TestPreviewNotFoundAndUnavailable(t *testing.T) {
 	expectError(t, e.alice.Do(http.MethodPost, e.eventPath(uuid.New())+"/preview", body(urlDest("https://example.com/"))), 404, "not_found")
 	expectError(t, e.alice.Do(http.MethodPost, e.eventPath(e.event)+"/preview", body(sinkDest(bobsEndpoint))), 404, "not_found")
 
-	e.status.active = false // no recent active guard heartbeat
+	e.status.setActive(false) // no recent active guard heartbeat
 	expectError(t, e.alice.Do(http.MethodPost, e.eventPath(e.event)+"/preview", body(urlDest("https://example.com/"))), 503, "replay_unavailable")
 	if rec := e.alice.Do(http.MethodPost, e.eventPath(e.event)+"/preview", body(sinkDest(e.sink))); rec.Code != 200 {
 		t.Fatalf("sink preview without guard: %d %s", rec.Code, rec.Body)

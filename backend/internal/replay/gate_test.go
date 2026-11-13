@@ -3,6 +3,7 @@ package replay
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"relaylab/internal/platform/db/store"
@@ -10,14 +11,23 @@ import (
 )
 
 type fakeStatus struct {
+	mu     sync.Mutex
 	active bool
 	err    error
 	window int32
 }
 
 func (f *fakeStatus) GuardActiveRecently(_ context.Context, w int32) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.window = w
 	return f.active, f.err
+}
+
+func (f *fakeStatus) setActive(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.active = v
 }
 
 func TestGate(t *testing.T) {
@@ -25,14 +35,14 @@ func TestGate(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		enabled   bool
-		status    fakeStatus
+		status    *fakeStatus
 		url, sink error
 	}{
-		{"enabled, guard active", true, fakeStatus{active: true}, nil, nil},
-		{"enabled, guard inactive or stale", true, fakeStatus{}, ErrUnavailable, nil},
-		{"disabled", false, fakeStatus{active: true}, ErrUnavailable, ErrUnavailable},
+		{"enabled, guard active", true, &fakeStatus{active: true}, nil, nil},
+		{"enabled, guard inactive or stale", true, &fakeStatus{}, ErrUnavailable, nil},
+		{"disabled", false, &fakeStatus{active: true}, ErrUnavailable, ErrUnavailable},
 	} {
-		g := NewGate(tc.enabled, &tc.status)
+		g := NewGate(tc.enabled, tc.status)
 		if err := g.Check(ctx, DestinationURL); !errors.Is(err, tc.url) {
 			t.Errorf("%s: url %v, want %v", tc.name, err, tc.url)
 		}

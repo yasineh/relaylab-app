@@ -1,8 +1,11 @@
 // Command api runs the RelayLab HTTP server: dashboard API, public ingestion,
 // static web app, and health endpoints.
 //
-//	api           start the HTTP server (connects as app_runtime)
-//	api migrate   apply database migrations (connects as app_migrator)
+//	api                    start the HTTP server (connects as app_runtime)
+//	api migrate            apply database migrations (connects as app_migrator)
+//	api healthcheck [url]  exit 0 if url (default http://127.0.0.1:8080/healthz)
+//	                       answers 200; the image's HEALTHCHECK, since the
+//	                       distroless runtime has no shell or curl
 package main
 
 import (
@@ -44,8 +47,10 @@ func main() {
 		switch os.Args[1] {
 		case "migrate":
 			os.Exit(runMigrate())
+		case "healthcheck":
+			os.Exit(runHealthcheck(os.Args[2:]))
 		default:
-			fmt.Fprintf(os.Stderr, "unknown command %q (expected: migrate)\n", os.Args[1])
+			fmt.Fprintf(os.Stderr, "unknown command %q (expected: migrate, healthcheck)\n", os.Args[1])
 			os.Exit(2)
 		}
 	}

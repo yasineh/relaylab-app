@@ -3,8 +3,12 @@
 #   /usr/local/bin/api            HTTP server (serves the embedded web app)
 #   /usr/local/bin/api migrate    apply migrations (migrator role)
 #   /usr/local/bin/worker         background worker
+#   /usr/local/bin/api healthcheck [url]   liveness probe (HEALTHCHECK below; the
+#                                 worker's Compose service passes its own URL)
+# Base images are pinned by digest (multi-arch index). Update them deliberately:
+#   docker buildx imagetools inspect <image:tag>
 
-FROM node:24-alpine AS web
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS web
 RUN npm install -g pnpm@12.16.1
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -15,7 +19,7 @@ RUN pnpm install --frozen-lockfile --filter @relaylab/web
 COPY web/ web/
 RUN pnpm --filter @relaylab/web build
 
-FROM golang:1.27-alpine AS go
+FROM golang:1.27-alpine@sha256:eb61c3873c97416fff0116553fff65d67a3549f72e11d9758849a689cdd8b523 AS go
 WORKDIR /src/backend
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
@@ -27,8 +31,9 @@ ENV CGO_ENABLED=0
 RUN go build -trimpath -ldflags="-s -w" -tags embedweb -o /out/api ./cmd/api \
  && go build -trimpath -ldflags="-s -w" -o /out/worker ./cmd/worker
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
 COPY --from=go /out/api /out/worker /usr/local/bin/
 USER nonroot:nonroot
 EXPOSE 8080 8081
+HEALTHCHECK --interval=5s --timeout=3s --retries=10 CMD ["/usr/local/bin/api", "healthcheck"]
 CMD ["/usr/local/bin/api"]

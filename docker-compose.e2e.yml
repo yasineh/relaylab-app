@@ -170,6 +170,11 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/api", "healthcheck", "http://127.0.0.1:8081/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # Controlled replay destination (test-only, internal network only).
   echo:

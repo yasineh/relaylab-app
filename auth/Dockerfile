@@ -6,8 +6,10 @@
 #   node src/cli/migrate.ts      apply Better Auth migrations (auth_migrator role)
 #   node src/cli/create-user.ts  operator: create a verified user (password on stdin)
 # Node 24 runs the TypeScript sources directly (type stripping); there is no build step.
+# Base images are pinned by digest (multi-arch index). Update them deliberately:
+#   docker buildx imagetools inspect <image:tag>
 
-FROM node:24-alpine AS deps
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS deps
 RUN npm install -g pnpm@12.16.1
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -16,7 +18,7 @@ COPY web/package.json web/
 COPY backend/package.json backend/
 RUN pnpm install --frozen-lockfile --prod --filter @relaylab/auth
 
-FROM node:24-alpine
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=deps --chown=root:root /src/node_modules ./node_modules
@@ -24,6 +26,10 @@ COPY --from=deps --chown=root:root /src/auth/node_modules ./auth/node_modules
 COPY --chown=root:root auth/package.json auth/
 COPY --chown=root:root auth/src auth/src
 COPY --chown=root:root deploy/sql deploy/sql
+# The service runs with node alone: drop the package managers bundled in the
+# base image (they are never used at runtime and carry their own CVEs).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 WORKDIR /app/auth
 USER node
 EXPOSE 3001

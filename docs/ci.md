@@ -30,7 +30,7 @@ passed.
 | **Auth service** | Prettier, oxlint, TypeScript, or the Vitest suite (against a real PostgreSQL) fails for `auth/`, or Better Auth migrations fail on a fresh database or are not idempotent |
 | **Auth contract** | The real auth service, the Go `/api/auth` proxy, and the Go session validator disagree: sign-in, sign-out, revoke-all, password change, forced expiry, tampered cookies, unverified users, rate limiting, or reset enumeration (`backend/scripts/auth-contract.sh`) |
 | **Security scans** | gitleaks finds a secret in the full history of the selected branch, govulncheck finds a reachable Go vulnerability, or `pnpm audit --prod` reports a high/critical advisory |
-| **Container image** | The Docker build fails, or Trivy finds a fixable HIGH/CRITICAL vulnerability in the image |
+| **Container image** | Either image (Go binaries, auth service) fails to build or runs as root, or Trivy finds a fixable HIGH/CRITICAL vulnerability or a secret in it |
 | **End-to-end** | Prettier, oxlint, or TypeScript fails for `e2e/`, the e2e stack (`docker-compose.e2e.yml`) does not become healthy, or any Playwright test fails (Chromium, no retries). On failure the HTML report, traces, screenshots, and the stack's logs are uploaded as the `e2e-report` artifact. See [Testing](development/testing.md) |
 | **ci-success** | Any job above failed, was cancelled, or was skipped. **This is the one result to check before merging** |
 

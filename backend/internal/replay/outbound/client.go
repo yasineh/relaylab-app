@@ -105,7 +105,7 @@ type Client struct {
 	// testAddrs are socket addresses that allowlisted test names resolved
 	// to; the dial-time check admits exactly these.
 	testAddrs sync.Map // netip.AddrPort -> struct{}
-	logger   *slog.Logger
+	logger    *slog.Logger
 }
 
 // acquireTimeout is how long a request waits for a concurrency slot (spec).

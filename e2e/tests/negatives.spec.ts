@@ -200,6 +200,12 @@ test.describe('unsafe replay destinations (3.5)', () => {
     await expect(page.getByText('Not replayed yet.', { exact: false })).toBeVisible()
     const replays = await page.request.get(`${BASE_URL}/api/v1/projects/${project.id}/replays`)
     expect(((await replays.json()) as { items: unknown[] }).items).toHaveLength(0)
-    expect(serviceLogs('echo', since)).not.toContain('echo request')
+    // Nothing was queued, so the worker never attempted these addresses. (The
+    // offline test replays to example.com in parallel, so only the IP
+    // destinations, unique to this test, are checked in the worker log.)
+    const workerLog = serviceLogs('worker', since)
+    for (const host of ['169.254.169.254', '127.0.0.1', '10.0.0.5']) {
+      expect(workerLog).not.toContain(`"host":"${host}"`)
+    }
   })
 })

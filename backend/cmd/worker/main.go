@@ -1,14 +1,19 @@
 // Command worker runs RelayLab background jobs and exposes liveness and
 // readiness on an internal port (WORKER_HEALTH_ADDR, default :8081).
 //
-// No job handlers exist yet; job processing arrives with add-event-replay (D5).
-// The outbound request guard used by replay is built and self-checked at
-// startup; readiness reports it as outbound_guard (active or inactive), and
-// /metrics on the same internal port exposes outbound_requests_total.
+// It runs replay jobs (add-event-replay, D5) from the Postgres queue when
+// REPLAY_ENABLED is true, and every 15 seconds reports its outbound guard's
+// self-check to app.worker_heartbeats, which the API reads before offering
+// URL replay. Readiness reports the guard as outbound_guard (active or
+// inactive), and /metrics on the same internal port exposes the outbound and
+// replay metrics.
 package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -26,6 +31,8 @@ import (
 	"relaylab/internal/platform/health"
 	"relaylab/internal/platform/httpx"
 	"relaylab/internal/platform/logging"
+	"relaylab/internal/platform/redact"
+	"relaylab/internal/replay"
 	"relaylab/internal/replay/outbound"
 )
 
@@ -39,6 +46,18 @@ func run() int {
 		return 1
 	}
 	outCfg, err := config.LoadOutbound(os.Getenv, cfg)
+	if err != nil {
+		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
+	replayCfg, err := config.LoadReplay(os.Getenv, cfg.Env)
+	if err != nil {
+		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
+	ingestCfg, err := config.LoadIngest(os.Getenv)
 	if err != nil {
 		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
 			Error("invalid configuration", slog.String("error", err.Error()))
@@ -68,6 +87,28 @@ func run() int {
 		return 1
 	}
 	checker := health.New(dbCheck, migCheck)
+
+	workerID := newWorkerID()
+	go replay.NewHeartbeat(pool, workerID, outbound.UserAgent(), guard, logger).Run(ctx)
+	if replayCfg.Enabled {
+		var sealer *replay.Sealer
+		if sealer, err = replay.NewSealer([]byte(replayCfg.OverrideKey.Reveal())); err != nil {
+			logger.Error("invalid replay override key", slog.String("error", err.Error()))
+			return 1
+		}
+		replayMetrics := replay.NewMetrics(registry)
+		deliverer := replay.NewDeliverer(replay.DelivererOptions{
+			Pool: pool, Sender: guard, Sealer: sealer, Limits: replayCfg, Logger: logger, Metrics: replayMetrics,
+			// The same redaction rules as ingestion, for sink events and response headers.
+			Red: redact.New(ingestCfg.RedactExtraHeaders, ingestCfg.RedactExtraParams),
+		})
+		runner := replay.NewRunner(replay.RunnerOptions{
+			Pool: pool, WorkerID: workerID, Limits: replayCfg, Slots: outCfg.MaxConcurrency,
+			Executor: deliverer, Logger: logger, Metrics: replayMetrics,
+		})
+		deliverer.Bind(runner)
+		go runner.Run(ctx)
+	}
 	checker.AddFlag("outbound_guard", func() string {
 		if guard.Active() {
 			return "active"
@@ -88,7 +129,8 @@ func run() int {
 		logger.Error("listen failed", slog.String("addr", cfg.WorkerHealthAddr), slog.String("error", err.Error()))
 		return 1
 	}
-	logger.Info("worker started; no job handlers registered yet", slog.String("health_addr", ln.Addr().String()))
+	logger.Info("worker started", slog.String("health_addr", ln.Addr().String()),
+		slog.String("worker_id", workerID), slog.Bool("replay_enabled", replayCfg.Enabled))
 
 	if err := httpx.Serve(ctx, srv, ln, cfg.ShutdownGrace, checker.MarkShuttingDown); err != nil {
 		logger.Error("worker health server stopped with error", slog.String("error", err.Error()))
@@ -96,4 +138,17 @@ func run() int {
 	}
 	logger.Info("worker stopped")
 	return 0
+}
+
+// newWorkerID names this process for leases and heartbeats: host, pid, and a
+// random suffix, so restarts never reuse an id.
+func newWorkerID() string {
+	host, _ := os.Hostname()
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	id := fmt.Sprintf("%s-%d-%s", host, os.Getpid(), hex.EncodeToString(b))
+	if len(id) > 128 {
+		id = id[len(id)-128:]
+	}
+	return id
 }

@@ -3,6 +3,7 @@ package replay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -149,7 +150,7 @@ func TestLeaseExtensionAndLoss(t *testing.T) {
 		t.Fatalf("extend as holder: %v", err)
 	}
 	other := Job{ID: ids[0], owner: "someone-else", runner: r}
-	if err := other.Extend(context.Background()); err != ErrLeaseLost {
+	if err := other.Extend(context.Background()); !errors.Is(err, ErrLeaseLost) {
 		t.Fatalf("extend as non-holder: %v", err)
 	}
 	stop()

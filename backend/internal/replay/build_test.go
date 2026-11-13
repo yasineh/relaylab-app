@@ -2,6 +2,7 @@ package replay
 
 import (
 	"bytes"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -77,8 +78,8 @@ func TestBuildRequestFiltersHeaders(t *testing.T) {
 
 func TestBuildRequestBodyAndMethod(t *testing.T) {
 	body := []byte{0xff, 0x00, 0xfe, 'x', 0x80}
-	b := BuildRequest(StoredEvent{Method: "POST", Body: body, Headers: [][2]string{{"Content-Type", "application/octet-stream"}}}, "PUT", nil, uuid.New(), red)
-	if !bytes.Equal(b.Body, body) || b.Method != "PUT" || b.Header.Get("Content-Type") != "application/octet-stream" {
+	b := BuildRequest(StoredEvent{Method: "POST", Body: body, Headers: [][2]string{{"Content-Type", "application/octet-stream"}}}, http.MethodPut, nil, uuid.New(), red)
+	if !bytes.Equal(b.Body, body) || b.Method != http.MethodPut || b.Header.Get("Content-Type") != "application/octet-stream" {
 		t.Fatalf("%+v", b)
 	}
 }

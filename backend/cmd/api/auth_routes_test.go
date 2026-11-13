@@ -6,12 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"relaylab/internal/platform/config"
 	"strings"
 	"sync/atomic"
 	"testing"
 
 	"relaylab/internal/identity"
+	"relaylab/internal/platform/config"
 )
 
 // Handler tests for the add-user-auth spec scenarios at the router level.

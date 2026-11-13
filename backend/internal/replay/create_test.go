@@ -30,7 +30,7 @@ func TestCreateURLReplayQueued(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	r := decode[ReplayJSON](t, rec)
-	if r.State != "queued" || r.Target != "https://hooks.example.com/receive?token=abc" || r.Method != "POST" ||
+	if r.State != "queued" || r.Target != "https://hooks.example.com/receive?token=abc" || r.Method != http.MethodPost ||
 		r.CreatedAt.IsZero() || r.EventID != e.event.String() || r.Outcome != nil {
 		t.Fatalf("replay %+v", r)
 	}
@@ -61,7 +61,7 @@ func TestCreateSinkReplayAndMethod(t *testing.T) {
 	in["method"] = "PUT"
 	rec := e.alice.Do(http.MethodPost, e.eventPath(e.event), body(in))
 	r := decode[ReplayJSON](t, rec)
-	if rec.Code != 202 || r.Method != "PUT" || r.Destination.Type != "sink" || *r.Destination.EndpointName != "Sink" {
+	if rec.Code != 202 || r.Method != http.MethodPut || r.Destination.Type != "sink" || *r.Destination.EndpointName != "Sink" {
 		t.Fatalf("%d %+v", rec.Code, r)
 	}
 }

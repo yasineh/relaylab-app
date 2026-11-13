@@ -18,7 +18,7 @@ func TestPreviewShowsSentAndStrippedHeaders(t *testing.T) {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
 	}
 	p := decode[Preview](t, rec)
-	if p.Method != "POST" || p.Target != "https://hooks.example.com/receive?x=1" || p.BodySize != 20 ||
+	if p.Method != http.MethodPost || p.Target != "https://hooks.example.com/receive?x=1" || p.BodySize != 20 ||
 		p.ContentType == nil || *p.ContentType != "application/json" {
 		t.Fatalf("preview %+v", p)
 	}

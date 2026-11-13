@@ -3,6 +3,7 @@ import { ConfigError, loadConfig } from './config.ts'
 import { checkReady, createPool } from './db.ts'
 import { createLogger } from './logger.ts'
 import { MemoryMailer, createSmtpMailer } from './mailer.ts'
+import { startRateLimitPruner } from './retention.ts'
 import { createAuthServer } from './server.ts'
 
 const SHUTDOWN_GRACE_MS = 15_000
@@ -34,6 +35,8 @@ const server = createAuthServer({
   ready: () => checkReady(pool),
 })
 
+const stopPruner = startRateLimitPruner(pool, logger)
+
 server.listen(config.port, () => {
   logger.info(
     { port: config.port, env: config.env, signup_enabled: config.signupEnabled },
@@ -46,6 +49,7 @@ function shutdown(signal: string): void {
   if (stopping) return
   stopping = true
   logger.info({ signal }, 'shutting down')
+  stopPruner()
   const force = setTimeout(() => process.exit(1), SHUTDOWN_GRACE_MS)
   force.unref()
   server.close(() => {

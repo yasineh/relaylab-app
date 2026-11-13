@@ -22,6 +22,9 @@ export const SESSION_UPDATE_AGE = 24 * 60 * 60
 export const VERIFICATION_EXPIRES_IN = 24 * 60 * 60
 export const RESET_EXPIRES_IN = 60 * 60
 
+/** Window of the default per-IP rate limit on every other auth route, in seconds. */
+export const RATE_LIMIT_DEFAULT_WINDOW = 60
+
 /** Per-IP rate limits on the endpoints that send mail or check passwords (design decision 8). */
 export const RATE_LIMIT_RULES = {
   '/sign-in/email': { window: 300, max: 10 },
@@ -117,7 +120,7 @@ export function authOptions({ config, pool, mailer, logger }: AuthDeps) {
     rateLimit: {
       enabled: config.rateLimitEnabled,
       storage: 'database',
-      window: 60,
+      window: RATE_LIMIT_DEFAULT_WINDOW,
       max: 100,
       customRules: { ...RATE_LIMIT_RULES },
     },

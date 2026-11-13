@@ -22,6 +22,13 @@ type AppAuditLog struct {
 	CreatedAt    pgtype.Timestamptz
 }
 
+// Seeded demo workspaces; deleted with their anonymous user
+type AppDemoWorkspace struct {
+	UserID    string
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
 // Webhook receiving endpoints; tokens stored only as HMAC hash + AES-GCM ciphertext
 type AppEndpoint struct {
 	ID              pgtype.UUID
@@ -144,4 +151,5 @@ type AuthUser struct {
 	Image         pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+	IsAnonymous   pgtype.Bool
 }

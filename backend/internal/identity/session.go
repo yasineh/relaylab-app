@@ -33,6 +33,10 @@ type Identity struct {
 	Email         string
 	Name          string
 	EmailVerified bool
+	// IsDemo marks a demo user (a Better Auth anonymous user). DemoExpiresAt
+	// is when the demo workspace expires; zero for real users.
+	IsDemo        bool
+	DemoExpiresAt time.Time
 	// ExpiresAt is the session's expiry at validation time. Better Auth may
 	// extend it later, so long-lived requests re-validate instead of trusting it.
 	ExpiresAt time.Time
@@ -50,6 +54,14 @@ type Validator struct {
 	secret     []byte
 	store      SessionStore
 	now        func() time.Time
+	demoTTL    time.Duration
+}
+
+// WithDemoTTL sets how long demo users live (DEMO_TTL). Their sessions are
+// refused once the demo expires, even before the auth service deletes them.
+func (v *Validator) WithDemoTTL(ttl time.Duration) *Validator {
+	v.demoTTL = ttl
+	return v
 }
 
 // NewValidator builds a validator for the environment's session cookie name.
@@ -59,6 +71,7 @@ func NewValidator(cfg *config.Auth, s SessionStore) *Validator {
 		secret:     []byte(cfg.SessionSecret.Reveal()),
 		store:      s,
 		now:        time.Now,
+		demoTTL:    24 * time.Hour,
 	}
 }
 
@@ -132,13 +145,21 @@ func (v *Validator) Validate(ctx context.Context, r *http.Request) (Identity, er
 	if !row.ExpiresAt.Valid || !row.ExpiresAt.Time.After(v.now()) {
 		return Identity{}, ErrSessionExpired
 	}
-	return Identity{
+	id := Identity{
 		UserID:        row.UserID,
 		Email:         row.Email,
 		Name:          row.Name,
 		EmailVerified: row.EmailVerified,
 		ExpiresAt:     row.ExpiresAt.Time,
-	}, nil
+	}
+	if row.IsDemo {
+		id.IsDemo = true
+		id.DemoExpiresAt = row.UserCreatedAt.Time.Add(v.demoTTL)
+		if !row.UserCreatedAt.Valid || !id.DemoExpiresAt.After(v.now()) {
+			return Identity{}, ErrSessionExpired // the demo is over; the purge deletes the user
+		}
+	}
+	return id, nil
 }
 
 type identityKey struct{}

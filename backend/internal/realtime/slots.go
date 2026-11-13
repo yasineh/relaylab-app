@@ -18,10 +18,13 @@ func NewSlots(max int) *Slots {
 
 // Acquire takes a slot for user. It returns false when the user is at the cap.
 // Every successful Acquire must be paired with Release.
-func (s *Slots) Acquire(user string) bool {
+func (s *Slots) Acquire(user string) bool { return s.AcquireMax(user, s.max) }
+
+// AcquireMax is Acquire with a per-call cap (demo users have a lower one).
+func (s *Slots) AcquireMax(user string, max int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.open[user] >= s.max {
+	if s.open[user] >= max {
 		return false
 	}
 	s.open[user]++

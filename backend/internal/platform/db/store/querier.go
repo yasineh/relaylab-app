@@ -34,6 +34,9 @@ type Querier interface {
 	// One statement; everything scoped to the project goes by FK cascade.
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) (int64, error)
 	DeleteStaleWorkerHeartbeats(ctx context.Context) error
+	// Demo users' projects holding more than the demo cap (DEMO_MAX_EVENTS).
+	DemoProjectsOverEventCap(ctx context.Context, cap int64) ([]pgtype.UUID, error)
+	DemoWorkspaceExists(ctx context.Context, userID string) (bool, error)
 	// The newest event that falls outside the cap: everything at or before it
 	// (by received_at, then id) is beyond the cap.
 	EventCapBoundary(ctx context.Context, arg EventCapBoundaryParams) (EventCapBoundaryRow, error)
@@ -46,6 +49,8 @@ type Querier interface {
 	FinishJob(ctx context.Context, arg FinishJobParams) (int64, error)
 	GetEndpoint(ctx context.Context, arg GetEndpointParams) (GetEndpointRow, error)
 	// Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
+	// is_demo: the project belongs to a demo user, whose endpoints have a lower
+	// rate limit (add-production-readiness).
 	GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error)
 	// The parsed body_json copy is not returned: clients parse the exact body text,
 	// which keeps key order and duplicates. source_ip_prefix is returned as text
@@ -82,6 +87,7 @@ type Querier interface {
 	// the window.
 	GuardActiveRecently(ctx context.Context, windowSeconds int32) (bool, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	InsertDemoWorkspace(ctx context.Context, arg InsertDemoWorkspaceParams) (int64, error)
 	// Webhook event queries. Ingestion runs these without an owner: the endpoint
 	// token is the capability, and endpoint_id/project_id come from the token
 	// lookup, never from the request.
@@ -116,6 +122,9 @@ type Querier interface {
 	// Newest first, keyed by (created_at, id). The optional filters narrow
 	// inside the owner's project; cursor_created_at is NULL on the first page.
 	ListReplays(ctx context.Context, arg ListReplaysParams) ([]ListReplaysRow, error)
+	// Demo workspaces (add-production-readiness).
+	// Serialises concurrent first requests of one demo user.
+	LockDemoWorkspace(ctx context.Context, userID string) error
 	// Endpoint queries. Every dashboard query is scoped to the owner by joining
 	// app.projects (owner_id = the session user). Only GetEndpointByTokenHash, used
 	// by public ingestion, looks endpoints up without an owner: the token is the

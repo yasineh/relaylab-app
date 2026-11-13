@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"relaylab/internal/demo"
 	"relaylab/internal/endpoints"
 	"relaylab/internal/events"
 	"relaylab/internal/identity"
@@ -32,6 +33,8 @@ type routerDeps struct {
 	replay    *replay.Handler    // nil in tests that do not need it
 	replayCfg replayAvailability // nil: replay reported unavailable
 	retention *config.Retention  // nil in tests that do not need it
+	demo      *demo.Provisioner  // nil: demo users get no seeded workspace
+	demoCfg   *config.Demo       // nil: demos reported off
 	ingestion *ingestion.Handler // public /h/{token}; never reads the session
 	web       http.Handler       // embedded SPA; nil when not built
 }
@@ -77,9 +80,13 @@ func newRouter(d routerDeps) http.Handler {
 				httpx.RequireJSON,
 				unlessPublic(identity.RequireSession(d.validator, d.auth.RequireEmailVerification)),
 			)
+			if d.demo != nil {
+				// After the session check: a demo user's workspace exists before any handler runs.
+				v1.Use(d.demo.Middleware)
+			}
 			v1.NotFound(httpx.NotFound)
 			v1.MethodNotAllowed(httpx.MethodNotAllowed)
-			v1.Get("/config", publicConfig(d.auth, d.replayCfg, d.retention))
+			v1.Get("/config", publicConfig(d.auth, d.replayCfg, d.retention, d.demoCfg))
 			v1.Get("/me", identity.Me)
 			v1.Route("/projects", func(pr chi.Router) {
 				d.projects.Routes(pr)
@@ -139,6 +146,8 @@ type publicConfigResponse struct {
 	ReplayURLAvailable bool `json:"replay_url_available"`
 	// Retention is how long events are kept, for the retention notices.
 	Retention *retentionJSON `json:"retention,omitempty"`
+	// DemoEnabled is DEMO_ENABLED: the landing page offers "Try the demo".
+	DemoEnabled bool `json:"demo_enabled"`
 }
 
 // retentionJSON reports RETENTION_EVENT_TTL (0: events are not deleted by
@@ -154,7 +163,7 @@ type replayAvailability interface {
 	URLAvailable(ctx context.Context) (bool, error)
 }
 
-func publicConfig(a *config.Auth, replayGate replayAvailability, ret *config.Retention) http.HandlerFunc {
+func publicConfig(a *config.Auth, replayGate replayAvailability, ret *config.Retention, demoCfg *config.Demo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := publicConfigResponse{
 			SignupEnabled:             a.SignupEnabled,
@@ -164,6 +173,9 @@ func publicConfig(a *config.Auth, replayGate replayAvailability, ret *config.Ret
 			body.ReplayEnabled = replayGate.Enabled()
 			// A heartbeat read error reports URL replay unavailable (fail closed).
 			body.ReplayURLAvailable, _ = replayGate.URLAvailable(r.Context())
+		}
+		if demoCfg != nil {
+			body.DemoEnabled = demoCfg.Enabled
 		}
 		if ret != nil {
 			body.Retention = &retentionJSON{EventTTLSeconds: int64(ret.EventTTL.Seconds()), MaxEventsPerProject: ret.MaxEventsPerProject}

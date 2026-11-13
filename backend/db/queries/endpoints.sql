@@ -63,7 +63,13 @@ RETURNING e.id, e.name;
 
 -- name: GetEndpointByTokenHash :one
 -- Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
-SELECT id, project_id, enabled FROM app.endpoints WHERE token_hash = $1;
+-- is_demo: the project belongs to a demo user, whose endpoints have a lower
+-- rate limit (add-production-readiness).
+SELECT e.id, e.project_id, e.enabled, COALESCE(u."isAnonymous", false)::boolean AS is_demo
+FROM app.endpoints e
+JOIN app.projects p ON p.id = e.project_id
+JOIN auth."user" u ON u.id = p.owner_id
+WHERE e.token_hash = $1;
 
 -- name: InsertAuditLog :exec
 INSERT INTO app.audit_log (id, project_id, actor_user_id, action, resource_type, resource_id, metadata)

@@ -10,7 +10,9 @@ CREATE TABLE auth."user" (
   "emailVerified" boolean NOT NULL,
   image text,
   "createdAt" timestamptz NOT NULL,
-  "updatedAt" timestamptz NOT NULL
+  "updatedAt" timestamptz NOT NULL,
+  -- Added by Better Auth's anonymous plugin (demo users, add-production-readiness).
+  "isAnonymous" boolean DEFAULT false
 );
 
 CREATE TABLE auth."session" (

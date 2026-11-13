@@ -21,6 +21,7 @@ import (
 
 	"relaylab/internal/endpoints"
 	"relaylab/internal/endpoints/token"
+	"relaylab/internal/identity/authtest"
 	"relaylab/internal/ingestion"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/httpx"
@@ -425,5 +426,35 @@ func TestAckLatencyP95(t *testing.T) {
 	t.Logf("1 KiB JSON POST over %d requests: p50=%v p95=%v p99=%v", n, p50, p95, p99)
 	if p95 >= 100*time.Millisecond {
 		t.Fatalf("p95 %v >= 100ms", p95)
+	}
+}
+
+// Demo users' endpoints get the demo bucket (DEMO_INGEST_*); real users'
+// endpoints keep the normal one (add-production-readiness).
+func TestDemoEndpointsUseTheDemoRateLimit(t *testing.T) {
+	e := newEnvWith(t, nil, func(o *ingestion.Options) { o.DemoPerMinute, o.DemoBurst = 1, 2 })
+	authtest.SeedDemoUser(t, e.DB, "demo-ingest", time.Now())
+	demoProject := e.Project(t, "demo-ingest", "Demo project")
+	demoEp, err := e.svc.Create(context.Background(), "demo-ingest", demoProject, "Demo endpoint")
+	if err != nil {
+		t.Fatal(err)
+	}
+	demoTok := (*demoEp.URL)[strings.LastIndex(*demoEp.URL, "/")+1:]
+	_, realTok := e.endpoint(t)
+
+	codes := func(tok string, n int) []int {
+		var out []int
+		for range n {
+			out = append(out, e.send(http.MethodPost, "/h/"+tok, []byte("x")).Code)
+		}
+		return out
+	}
+	if got := codes(demoTok, 3); got[0] != 200 || got[1] != 200 || got[2] != http.StatusTooManyRequests {
+		t.Fatalf("demo endpoint: %v", got)
+	}
+	for i, c := range codes(realTok, 5) {
+		if c != 200 {
+			t.Fatalf("real endpoint request %d: %d", i, c)
+		}
 	}
 }

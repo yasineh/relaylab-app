@@ -11,6 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const demoProjectsOverEventCap = `-- name: DemoProjectsOverEventCap :many
+SELECT e.project_id FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN auth."user" u ON u.id = p.owner_id
+WHERE u."isAnonymous" IS TRUE
+GROUP BY e.project_id
+HAVING count(*) > $1::bigint
+`
+
+// Demo users' projects holding more than the demo cap (DEMO_MAX_EVENTS).
+func (q *Queries) DemoProjectsOverEventCap(ctx context.Context, cap int64) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, demoProjectsOverEventCap, cap)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var project_id pgtype.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const eventCapBoundary = `-- name: EventCapBoundary :one
 SELECT received_at, id FROM app.webhook_events
 WHERE project_id = $1

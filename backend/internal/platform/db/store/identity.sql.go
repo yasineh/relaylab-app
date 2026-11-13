@@ -17,7 +17,9 @@ SELECT
   s."expiresAt"      AS expires_at,
   u.email            AS email,
   u.name             AS name,
-  u."emailVerified"  AS email_verified
+  u."emailVerified"  AS email_verified,
+  COALESCE(u."isAnonymous", false)::boolean AS is_demo,
+  u."createdAt"      AS user_created_at
 FROM auth."session" s
 JOIN auth."user" u ON u.id = s."userId"
 WHERE s.token = $1
@@ -29,6 +31,8 @@ type GetSessionByTokenRow struct {
 	Email         string
 	Name          string
 	EmailVerified bool
+	IsDemo        bool
+	UserCreatedAt pgtype.Timestamptz
 }
 
 // The only query Go runs against Better Auth's tables: read-only session lookup
@@ -42,6 +46,8 @@ func (q *Queries) GetSessionByToken(ctx context.Context, token string) (GetSessi
 		&i.Email,
 		&i.Name,
 		&i.EmailVerified,
+		&i.IsDemo,
+		&i.UserCreatedAt,
 	)
 	return i, err
 }

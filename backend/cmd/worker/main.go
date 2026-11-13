@@ -66,6 +66,12 @@ func run() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	demoCfg, err := config.LoadDemo(os.Getenv, cfg.Env)
+	if err != nil {
+		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
 	retentionCfg, err := config.LoadRetention(os.Getenv, cfg.Env)
 	if err != nil {
 		logging.New(os.Stderr, "worker", string(cfg.Env), slog.LevelInfo).
@@ -109,7 +115,7 @@ func run() int {
 	checker := health.New(dbCheck, migCheck)
 
 	workerID := newWorkerID()
-	go retention.New(direct, retentionCfg, logger, retention.NewMetrics(registry)).Run(ctx)
+	go retention.New(direct, retentionCfg, logger, retention.NewMetrics(registry)).WithDemoCap(demoCfg.MaxEvents).Run(ctx)
 	go replay.NewHeartbeat(pool, workerID, outbound.UserAgent(), guard, logger).Run(ctx)
 	// Replay jobs always run: test-sink replays never leave RelayLab and work
 	// with REPLAY_ENABLED off; URL replays are refused unless it is on.

@@ -60,6 +60,8 @@ type StreamOptions struct {
 	Broker *realtime.Broker
 	// Slots caps concurrent streams per user (LIMIT_STREAMS_PER_USER).
 	Slots *realtime.Slots
+	// DemoMaxStreams caps demo users instead (DEMO_MAX_STREAMS); 0: no separate cap.
+	DemoMaxStreams int
 	// Metrics may be nil.
 	Metrics   *realtime.Metrics
 	Validator SessionValidator
@@ -147,7 +149,13 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !o.Slots.Acquire(owner) {
+	acquired := false
+	if id, ok := identity.FromContext(ctx); ok && id.IsDemo && o.DemoMaxStreams > 0 {
+		acquired = o.Slots.AcquireMax(owner, o.DemoMaxStreams)
+	} else {
+		acquired = o.Slots.Acquire(owner)
+	}
+	if !acquired {
 		httpx.WriteError(w, r, http.StatusTooManyRequests, "too_many_streams",
 			"Too many live connections are open. Close another RelayLab tab and try again.")
 		return

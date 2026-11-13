@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"relaylab/internal/identity"
 	"relaylab/internal/platform/audit"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/platform/db/store"
@@ -36,8 +37,10 @@ const MaxIdempotencyKey = 128
 
 // Errors the handlers map to responses.
 var (
-	ErrNotFound            = errors.New("not found")
-	ErrQueueFull           = errors.New("replay queue full")
+	ErrNotFound  = errors.New("not found")
+	ErrQueueFull = errors.New("replay queue full")
+	// ErrDemoRestricted: demo users replay to their test sink only (403).
+	ErrDemoRestricted      = errors.New("demo users may replay to the test sink only")
 	ErrIdempotencyConflict = errors.New("idempotency key reused with a different request")
 )
 
@@ -123,6 +126,9 @@ func (s *Service) resolve(ctx context.Context, owner string, project, eventID uu
 
 	fields := map[string]string{}
 	r.destType = in.Destination.Type
+	if id, ok := identity.FromContext(ctx); ok && id.IsDemo && r.destType == DestinationURL {
+		return resolved{}, ErrDemoRestricted
+	}
 	var sinkID uuid.UUID
 	switch r.destType {
 	case DestinationURL:

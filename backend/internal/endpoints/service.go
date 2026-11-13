@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"relaylab/internal/endpoints/token"
+	"relaylab/internal/identity"
 	"relaylab/internal/platform/audit"
 	"relaylab/internal/platform/db/store"
 	"relaylab/internal/platform/logging"
@@ -58,6 +59,21 @@ type Service struct {
 	keys       *token.Keys
 	ingestBase string
 	limit      int
+	// demoLimit applies to demo users (DEMO_MAX_ENDPOINTS); 0 means limit.
+	demoLimit int
+}
+
+// WithDemoLimit sets the endpoint limit for demo users' projects.
+func (s *Service) WithDemoLimit(n int) *Service {
+	s.demoLimit = n
+	return s
+}
+
+func (s *Service) limitFor(ctx context.Context) int {
+	if id, ok := identity.FromContext(ctx); ok && id.IsDemo && s.demoLimit > 0 {
+		return s.demoLimit
+	}
+	return s.limit
 }
 
 // NewService returns an endpoint service. ingestBase is INGEST_BASE_URL
@@ -105,7 +121,7 @@ func (s *Service) Create(ctx context.Context, owner string, projectID uuid.UUID,
 		if err != nil {
 			return err
 		}
-		if int(n) >= s.limit {
+		if int(n) >= s.limitFor(ctx) {
 			return ErrLimitReached
 		}
 		r, err := q.CreateEndpoint(ctx, store.CreateEndpointParams{

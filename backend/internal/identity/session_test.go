@@ -250,7 +250,7 @@ func TestMeReturnsSessionUserAndIgnoresForgedHeaders(t *testing.T) {
 	}
 	var got map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &got)
-	want := map[string]any{"id": "u1", "email": "u1@example.test", "name": "User u1", "email_verified": true}
+	want := map[string]any{"id": "u1", "email": "u1@example.test", "name": "User u1", "email_verified": true, "is_demo": false}
 	if len(got) != len(want) {
 		t.Fatalf("body = %v", got)
 	}

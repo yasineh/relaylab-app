@@ -146,3 +146,23 @@ func TestOverridesRefusedWithoutKey(t *testing.T) {
 		t.Fatalf("sink replay without overrides: %d %s", rec.Code, rec.Body)
 	}
 }
+
+// Demo users replay to their test sink only, even with URL replay enabled.
+func TestDemoUsersReplayToTheSinkOnly(t *testing.T) {
+	e := newAPIEnv(t, apiOpts{})
+	authtest.SeedDemoUser(t, e.DB, "demo-r", time.Now())
+	demo := e.As(t, e.h, "demo-r")
+	project := e.Project(t, "demo-r", "Demo project")
+	source := e.endpoint(t, project, "Demo endpoint", true)
+	sink := e.endpoint(t, project, "Test sink", true)
+	event := e.storeEvent(t, project, source, [][2]string{{"Content-Type", "application/json"}}, []byte(`{}`), "application/json")
+	path := "/api/v1/projects/" + project.String() + "/events/" + event.String() + "/replays"
+	expectError(t, demo.Do(http.MethodPost, path, body(urlDest("https://example.com/"))), 403, "demo_restricted")
+	expectError(t, demo.Do(http.MethodPost, path+"/preview", body(urlDest("https://example.com/"))), 403, "demo_restricted")
+	if n := e.count("app.replay_attempts"); n != 0 {
+		t.Fatalf("%d replays queued", n)
+	}
+	if rec := demo.Do(http.MethodPost, path, body(sinkDest(sink))); rec.Code != 202 {
+		t.Fatalf("demo sink replay: %d %s", rec.Code, rec.Body)
+	}
+}

@@ -78,6 +78,17 @@ func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) (i
 	return result.RowsAffected(), nil
 }
 
+const demoWorkspaceExists = `-- name: DemoWorkspaceExists :one
+SELECT EXISTS (SELECT 1 FROM app.demo_workspaces WHERE user_id = $1)::boolean
+`
+
+func (q *Queries) DemoWorkspaceExists(ctx context.Context, userID string) (bool, error) {
+	row := q.db.QueryRow(ctx, demoWorkspaceExists, userID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const getProject = `-- name: GetProject :one
 SELECT id, owner_id, name, description, created_at, updated_at
 FROM app.projects
@@ -101,6 +112,25 @@ func (q *Queries) GetProject(ctx context.Context, arg GetProjectParams) (AppProj
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertDemoWorkspace = `-- name: InsertDemoWorkspace :execrows
+INSERT INTO app.demo_workspaces (user_id, expires_at)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO NOTHING
+`
+
+type InsertDemoWorkspaceParams struct {
+	UserID    string
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) InsertDemoWorkspace(ctx context.Context, arg InsertDemoWorkspaceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDemoWorkspace, arg.UserID, arg.ExpiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listProjects = `-- name: ListProjects :many
@@ -135,6 +165,18 @@ func (q *Queries) ListProjects(ctx context.Context, ownerID string) ([]AppProjec
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockDemoWorkspace = `-- name: LockDemoWorkspace :exec
+
+SELECT pg_advisory_xact_lock(727102, hashtext($1::text))
+`
+
+// Demo workspaces (add-production-readiness).
+// Serialises concurrent first requests of one demo user.
+func (q *Queries) LockDemoWorkspace(ctx context.Context, userID string) error {
+	_, err := q.db.Exec(ctx, lockDemoWorkspace, userID)
+	return err
 }
 
 const lockOwnerProjects = `-- name: LockOwnerProjects :exec

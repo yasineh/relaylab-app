@@ -6,7 +6,9 @@ SELECT
   s."expiresAt"      AS expires_at,
   u.email            AS email,
   u.name             AS name,
-  u."emailVerified"  AS email_verified
+  u."emailVerified"  AS email_verified,
+  COALESCE(u."isAnonymous", false)::boolean AS is_demo,
+  u."createdAt"      AS user_created_at
 FROM auth."session" s
 JOIN auth."user" u ON u.id = s."userId"
 WHERE s.token = $1;

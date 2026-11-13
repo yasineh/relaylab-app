@@ -148,6 +148,9 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrUnavailable):
 		httpx.WriteError(w, r, http.StatusServiceUnavailable, "replay_unavailable",
 			"Replay is unavailable right now. It is turned off, or the outbound safety check has not reported in; sending to a test sink may still work.")
+	case errors.Is(err, ErrDemoRestricted):
+		httpx.WriteError(w, r, http.StatusForbidden, "demo_restricted",
+			"Demo workspaces can replay to their test sink only.")
 	case errors.Is(err, ErrQueueFull):
 		httpx.WriteError(w, r, http.StatusTooManyRequests, "replay_queue_full",
 			"This project already has the maximum number of replays waiting or running. Try again when some finish.")

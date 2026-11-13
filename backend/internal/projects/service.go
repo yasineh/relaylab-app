@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"relaylab/internal/identity"
 	"relaylab/internal/platform/db/store"
 )
 
@@ -63,6 +64,21 @@ type Update struct {
 type Service struct {
 	pool  *pgxpool.Pool
 	limit int
+	// demoLimit applies to demo users (DEMO_MAX_PROJECTS); 0 means limit.
+	demoLimit int
+}
+
+// WithDemoLimit sets the project limit for demo users.
+func (s *Service) WithDemoLimit(n int) *Service {
+	s.demoLimit = n
+	return s
+}
+
+func (s *Service) limitFor(ctx context.Context) int {
+	if id, ok := identity.FromContext(ctx); ok && id.IsDemo && s.demoLimit > 0 {
+		return s.demoLimit
+	}
+	return s.limit
 }
 
 // NewService returns a service enforcing limit projects per user.
@@ -103,7 +119,7 @@ func (s *Service) Create(ctx context.Context, ownerID, name string, description 
 		if err != nil {
 			return err
 		}
-		if int(n) >= s.limit {
+		if int(n) >= s.limitFor(ctx) {
 			return ErrLimitReached
 		}
 		created, err = q.CreateProject(ctx, store.CreateProjectParams{

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -39,6 +40,13 @@ type Purger struct {
 	metrics *Metrics
 	batch   int32
 	budget  time.Duration
+	demoCap int // DEMO_MAX_EVENTS per demo project; 0: no separate cap
+}
+
+// WithDemoCap sets the stored-event cap for demo users' projects.
+func (p *Purger) WithDemoCap(n int) *Purger {
+	p.demoCap = n
+	return p
 }
 
 // New returns a purger. metrics may be nil.
@@ -104,6 +112,9 @@ func (p *Purger) RunOnce(ctx context.Context) (res Result, ran bool, err error) 
 	}
 	step("expired events", func() error { return p.purgeExpired(runCtx, q, &res) })
 	step("event cap", func() error { return p.purgeOverCap(runCtx, q, &res) })
+	if p.demoCap > 0 {
+		step("demo event cap", func() error { return p.purgeDemoOverCap(runCtx, q, &res) })
+	}
 	step("audit log", func() error {
 		return p.loop(runCtx, func() (int64, error) {
 			n, err := q.PurgeAuditLog(runCtx, store.PurgeAuditLogParams{TtlSeconds: p.cfg.AuditTTL.Seconds(), RowLimit: p.batch})
@@ -170,6 +181,20 @@ func (p *Purger) purgeOverCap(ctx context.Context, q *store.Queries, res *Result
 	if err != nil {
 		return err
 	}
+	return p.capProjects(ctx, q, res, projects, limit)
+}
+
+func (p *Purger) purgeDemoOverCap(ctx context.Context, q *store.Queries, res *Result) error {
+	limit := int64(p.demoCap)
+	projects, err := q.DemoProjectsOverEventCap(ctx, limit)
+	if err != nil {
+		return err
+	}
+	return p.capProjects(ctx, q, res, projects, limit)
+}
+
+// capProjects deletes each project's oldest events beyond limit.
+func (p *Purger) capProjects(ctx context.Context, q *store.Queries, res *Result, projects []pgtype.UUID, limit int64) error {
 	for _, project := range projects {
 		b, err := q.EventCapBoundary(ctx, store.EventCapBoundaryParams{ProjectID: project, Cap: limit})
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -147,20 +147,32 @@ func (q *Queries) GetEndpoint(ctx context.Context, arg GetEndpointParams) (GetEn
 }
 
 const getEndpointByTokenHash = `-- name: GetEndpointByTokenHash :one
-SELECT id, project_id, enabled FROM app.endpoints WHERE token_hash = $1
+SELECT e.id, e.project_id, e.enabled, COALESCE(u."isAnonymous", false)::boolean AS is_demo
+FROM app.endpoints e
+JOIN app.projects p ON p.id = e.project_id
+JOIN auth."user" u ON u.id = p.owner_id
+WHERE e.token_hash = $1
 `
 
 type GetEndpointByTokenHashRow struct {
 	ID        pgtype.UUID
 	ProjectID pgtype.UUID
 	Enabled   bool
+	IsDemo    bool
 }
 
 // Public ingestion lookup (add-webhook-ingestion): the presented token's HMAC.
+// is_demo: the project belongs to a demo user, whose endpoints have a lower
+// rate limit (add-production-readiness).
 func (q *Queries) GetEndpointByTokenHash(ctx context.Context, tokenHash []byte) (GetEndpointByTokenHashRow, error) {
 	row := q.db.QueryRow(ctx, getEndpointByTokenHash, tokenHash)
 	var i GetEndpointByTokenHashRow
-	err := row.Scan(&i.ID, &i.ProjectID, &i.Enabled)
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Enabled,
+		&i.IsDemo,
+	)
 	return i, err
 }
 

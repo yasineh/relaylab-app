@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"relaylab/internal/platform/httpx"
 	"relaylab/internal/platform/logging"
@@ -35,7 +36,8 @@ func RequireSession(v *Validator, requireVerification bool) func(http.Handler) h
 					"An unexpected error occurred.")
 				return
 			}
-			if requireVerification && !id.EmailVerified {
+			// Demo users have no email address to verify.
+			if requireVerification && !id.EmailVerified && !id.IsDemo {
 				httpx.WriteError(w, r, http.StatusForbidden, "email_not_verified",
 					"Verify your email address to continue.")
 				return
@@ -53,6 +55,9 @@ type meResponse struct {
 	Email         string `json:"email"`
 	Name          string `json:"name"`
 	EmailVerified bool   `json:"email_verified"`
+	// IsDemo and DemoExpiresAt describe a demo workspace (for its banner).
+	IsDemo        bool       `json:"is_demo"`
+	DemoExpiresAt *time.Time `json:"demo_expires_at,omitempty"`
 }
 
 // Me handles GET /api/v1/me: the signed-in user, from the validated session only.
@@ -63,10 +68,16 @@ func Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	httpx.WriteJSON(w, http.StatusOK, meResponse{
+	body := meResponse{
 		ID:            id.UserID,
 		Email:         id.Email,
 		Name:          id.Name,
 		EmailVerified: id.EmailVerified,
-	})
+		IsDemo:        id.IsDemo,
+	}
+	if id.IsDemo {
+		t := id.DemoExpiresAt.UTC()
+		body.DemoExpiresAt = &t
+	}
+	httpx.WriteJSON(w, http.StatusOK, body)
 }

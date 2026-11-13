@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"relaylab/internal/demo"
 	"relaylab/internal/endpoints"
 	"relaylab/internal/endpoints/token"
 	"relaylab/internal/events"
@@ -112,6 +113,12 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	demoCfg, err := config.LoadDemo(os.Getenv, cfg.Env)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
 	outCfg, err := config.LoadOutbound(os.Getenv, cfg)
 	if err != nil {
 		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
@@ -169,6 +176,8 @@ func runServer() int {
 		EndpointBurst:     cfg.Limits.IngestRateEndpointBurst,
 		IPPerMinute:       cfg.Limits.IngestRatePerIPPerMinute,
 		IPBurst:           cfg.Limits.IngestRateIPBurst,
+		DemoPerMinute:     demoCfg.IngestPerMinute,
+		DemoBurst:         demoCfg.IngestBurst,
 		IngestHost:        separateIngestHost(endpointCfg.IngestBaseURL.Hostname(), cfg.AppOrigin.Hostname()),
 	})
 
@@ -182,7 +191,12 @@ func runServer() int {
 	streamMetrics := realtime.NewMetrics(registry)
 	broker := realtime.NewBroker(realtime.Options{Source: listener, Logger: logger, OnSlowDrop: streamMetrics.SlowDrop})
 	go broker.Run(ctx)
-	validator := identity.NewValidator(authCfg, store.New(pool))
+	validator := identity.NewValidator(authCfg, store.New(pool)).WithDemoTTL(demoCfg.TTL)
+	demoProvisioner, err := demo.NewProvisioner(pool, tokenKeys, redactor, demoCfg)
+	if err != nil {
+		logger.Error("demo setup failed", slog.String("error", err.Error()))
+		return 1
+	}
 	replayGate := replay.NewGate(replayCfg.Enabled, store.New(pool))
 	replayHandler := replay.NewHandler(
 		replay.NewService(pool, redactor, replayGate, outbound.NewValidator(outbound.OptionsFrom(outCfg, "", nil, nil)),
@@ -202,13 +216,14 @@ func runServer() int {
 			Timeout:     time.Duration(cfg.Limits.AuthProxyTimeoutSeconds) * time.Second,
 			ForwardedTo: cfg.AppOrigin.Scheme,
 		}),
-		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser)),
+		projects: projects.NewHandler(projects.NewService(pool, cfg.Limits.ProjectsPerUser).WithDemoLimit(demoCfg.MaxProjects)),
 		endpoints: endpoints.NewHandler(endpoints.NewService(pool, tokenKeys,
-			endpointCfg.IngestBaseURL.String(), cfg.Limits.EndpointsPerProject)),
+			endpointCfg.IngestBaseURL.String(), cfg.Limits.EndpointsPerProject).WithDemoLimit(demoCfg.MaxEndpoints)),
 		events: events.NewHandler(events.NewService(pool, redactor), cfg.Limits.PageDefault, cfg.Limits.PageMax).
 			WithStream(events.StreamOptions{
 				Broker:          broker,
 				Slots:           realtime.NewSlots(cfg.Limits.StreamsPerUser),
+				DemoMaxStreams:  demoCfg.MaxStreams,
 				Metrics:         streamMetrics,
 				Validator:       validator,
 				RevalidateEvery: cfg.StreamRevalidate,
@@ -218,6 +233,8 @@ func runServer() int {
 		replay:    replayHandler,
 		replayCfg: replayGate,
 		retention: retentionCfg,
+		demo:      demoProvisioner,
+		demoCfg:   demoCfg,
 		web:       webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)

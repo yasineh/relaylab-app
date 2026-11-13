@@ -255,3 +255,19 @@ func SeedUser(t testing.TB, d *dbtest.DB, userID string) {
 		t.Fatalf("seed user: %v", err)
 	}
 }
+
+// SeedDemoUser inserts a demo user (a Better Auth anonymous user) created at
+// createdAt, as the auth service's anonymous sign-in would.
+func SeedDemoUser(t testing.TB, d *dbtest.DB, userID string, createdAt time.Time) {
+	t.Helper()
+	ctx := context.Background()
+	c, err := pgx.Connect(ctx, d.AuthRuntimeURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close(ctx) }()
+	if _, err := c.Exec(ctx, `INSERT INTO auth."user" (id, name, email, "emailVerified", "createdAt", "updatedAt", "isAnonymous")
+		VALUES ($1, 'Demo visitor', 'temp-' || $1 || '@demo.relaylab.invalid', false, $2, $2, true)`, userID, createdAt); err != nil {
+		t.Fatalf("seed demo user: %v", err)
+	}
+}

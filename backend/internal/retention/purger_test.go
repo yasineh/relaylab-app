@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
+	"relaylab/internal/identity/authtest"
 	"relaylab/internal/platform/config"
 	"relaylab/internal/testutil/fixture"
 )
@@ -508,4 +509,24 @@ func (l *sqlLog) all() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return append([]string(nil), l.sqls...)
+}
+
+// Demo projects are capped at DEMO_MAX_EVENTS; real projects keep the normal cap.
+func TestDemoProjectEventCap(t *testing.T) {
+	e := newEnv(t)
+	authtest.SeedDemoUser(t, e.DB, "demo-cap", time.Now())
+	demoProject := e.Project(t, "demo-cap", "Demo project")
+	realProject := e.Project(t, "alice", "Real")
+	e.events(demoProject, e.endpoint(demoProject, "D"), 210, time.Hour)
+	e.events(realProject, e.endpoint(realProject, "R"), 210, time.Hour)
+	res := e.runOnce(e.purger(defaults()).WithDemoCap(200))
+	if res.Events != 10 {
+		t.Fatalf("deleted %d", res.Events)
+	}
+	if n := e.Count(t, `SELECT count(*) FROM app.webhook_events WHERE project_id = $1`, demoProject); n != 200 {
+		t.Fatalf("demo project has %d", n)
+	}
+	if n := e.Count(t, `SELECT count(*) FROM app.webhook_events WHERE project_id = $1`, realProject); n != 210 {
+		t.Fatalf("real project has %d", n)
+	}
 }

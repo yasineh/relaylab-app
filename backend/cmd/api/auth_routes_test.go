@@ -64,8 +64,8 @@ func TestPublicConfigWithoutSession(t *testing.T) {
 	}
 	var body map[string]any
 	_ = json.Unmarshal(rec.Body.Bytes(), &body)
-	if len(body) != 4 || body["signup_enabled"] != true || body["email_verification_required"] != true ||
-		body["replay_enabled"] != false || body["replay_url_available"] != false {
+	if len(body) != 5 || body["signup_enabled"] != true || body["email_verification_required"] != true ||
+		body["replay_enabled"] != false || body["replay_url_available"] != false || body["demo_enabled"] != false {
 		t.Fatalf("config = %v", body)
 	}
 	// Only GET is public; anything else on the path still needs a session.
@@ -184,7 +184,7 @@ func TestPublicConfigReportsReplayAvailability(t *testing.T) {
 	a := &config.Auth{SignupEnabled: true}
 	for _, g := range []fakeReplayGate{{true, true}, {true, false}, {false, false}} {
 		rec := httptest.NewRecorder()
-		publicConfig(a, g, nil)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+		publicConfig(a, g, nil, nil)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
 		var body map[string]any
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
 		if body["replay_enabled"] != g.enabled || body["replay_url_available"] != g.url {
@@ -205,7 +205,7 @@ func TestPublicConfigReportsRetention(t *testing.T) {
 		{0, 10000, `"retention":{"event_ttl_seconds":0,"max_events_per_project":10000}`},
 	} {
 		rec := httptest.NewRecorder()
-		publicConfig(a, nil, &config.Retention{EventTTL: c.ttl, MaxEventsPerProject: c.cap})(rec,
+		publicConfig(a, nil, &config.Retention{EventTTL: c.ttl, MaxEventsPerProject: c.cap}, nil)(rec,
 			httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
 		if !strings.Contains(rec.Body.String(), c.want) {
 			t.Errorf("ttl %v: %s", c.ttl, rec.Body)

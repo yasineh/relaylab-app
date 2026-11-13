@@ -41,3 +41,17 @@ WHERE owner_id = $1;
 -- Serialises creates per owner for the limit check (the user row lives in the
 -- auth schema, where the api cannot take row locks).
 SELECT pg_advisory_xact_lock(hashtextextended('projects:' || sqlc.arg(owner_id)::text, 0));
+
+-- Demo workspaces (add-production-readiness).
+
+-- name: LockDemoWorkspace :exec
+-- Serialises concurrent first requests of one demo user.
+SELECT pg_advisory_xact_lock(727102, hashtext(sqlc.arg(user_id)::text));
+
+-- name: InsertDemoWorkspace :execrows
+INSERT INTO app.demo_workspaces (user_id, expires_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(expires_at))
+ON CONFLICT (user_id) DO NOTHING;
+
+-- name: DemoWorkspaceExists :one
+SELECT EXISTS (SELECT 1 FROM app.demo_workspaces WHERE user_id = sqlc.arg(user_id))::boolean;

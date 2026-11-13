@@ -90,3 +90,12 @@ SELECT pg_try_advisory_lock(727101) AS acquired;
 
 -- name: ReleaseRetentionLock :one
 SELECT pg_advisory_unlock(727101) AS released;
+
+-- name: DemoProjectsOverEventCap :many
+-- Demo users' projects holding more than the demo cap (DEMO_MAX_EVENTS).
+SELECT e.project_id FROM app.webhook_events e
+JOIN app.projects p ON p.id = e.project_id
+JOIN auth."user" u ON u.id = p.owner_id
+WHERE u."isAnonymous" IS TRUE
+GROUP BY e.project_id
+HAVING count(*) > sqlc.arg(cap)::bigint;

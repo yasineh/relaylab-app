@@ -1,0 +1,95 @@
+{
+  "comment": "Synthetic demo data (add-production-readiness). Reserved example domains only, demo_-prefixed fake credentials, no real people or secrets. Checked by seed_test.go.",
+  "project": { "name": "Demo project", "description": "A sample workspace with synthetic webhooks. It is deleted when the demo expires." },
+  "endpoint": "Demo endpoint",
+  "sink": "Test sink",
+  "events": [
+    {
+      "minutes_ago": 95,
+      "method": "POST",
+      "path": "/payments",
+      "headers": [
+        ["Content-Type", "application/json"],
+        ["User-Agent", "ExamplePay-Webhooks/2.1 (+https://payments.example.com)"],
+        ["Examplepay-Signature", "t=1700000000,v1=demo_signature_0000000000000000"],
+        ["X-Request-Id", "demo_req_7f3a"]
+      ],
+      "body": "{\"id\":\"evt_demo_001\",\"type\":\"payment.succeeded\",\"created\":1700000000,\"data\":{\"amount\":4200,\"currency\":\"eur\",\"customer\":\"cus_demo_42\",\"receipt_email\":\"buyer@example.com\"}}"
+    },
+    {
+      "minutes_ago": 80,
+      "method": "POST",
+      "path": "/payments",
+      "query": "attempt=2",
+      "headers": [
+        ["Content-Type", "application/json"],
+        ["User-Agent", "ExamplePay-Webhooks/2.1 (+https://payments.example.com)"],
+        ["Examplepay-Signature", "t=1700000300,v1=demo_signature_0000000000000001"]
+      ],
+      "body": "{\"id\":\"evt_demo_002\",\"type\":\"payment.failed\",\"data\":{\"amount\":1500,\"currency\":\"eur\",\"failure_code\":\"card_declined\",\"customer\":\"cus_demo_43\"}}"
+    },
+    {
+      "minutes_ago": 64,
+      "method": "POST",
+      "path": "/github",
+      "headers": [
+        ["Content-Type", "application/json"],
+        ["User-Agent", "Example-Hookshot/7c1d"],
+        ["X-Example-Event", "push"],
+        ["X-Hub-Signature-256", "sha256=demo_0000000000000000000000000000000000000000000000000000000000000000"]
+      ],
+      "body": "{\"ref\":\"refs/heads/main\",\"repository\":{\"full_name\":\"example/relaylab-demo\",\"html_url\":\"https://git.example.org/example/relaylab-demo\"},\"commits\":[{\"id\":\"demo0c0ffee\",\"message\":\"Fix the retry backoff\",\"author\":{\"name\":\"Demo Author\",\"email\":\"author@example.org\"}}]}"
+    },
+    {
+      "minutes_ago": 47,
+      "method": "POST",
+      "path": "/orders",
+      "query": "store=demo&token=demo_query_token",
+      "headers": [
+        ["Content-Type", "application/x-www-form-urlencoded"],
+        ["User-Agent", "ExampleShop/1.0"],
+        ["Authorization", "Bearer demo_bearer_token_0001"]
+      ],
+      "body": "order_id=demo-1001&total=19.90&currency=EUR&email=shopper%40example.net"
+    },
+    {
+      "minutes_ago": 30,
+      "method": "PUT",
+      "path": "/inventory/sku-demo-7",
+      "headers": [
+        ["Content-Type", "application/json"],
+        ["User-Agent", "ExampleWarehouse/3.4"],
+        ["X-Api-Key", "demo_api_key_0001"]
+      ],
+      "body": "{\"sku\":\"sku-demo-7\",\"quantity\":12,\"warehouse\":\"demo-north\"}"
+    },
+    {
+      "minutes_ago": 18,
+      "method": "POST",
+      "path": "/payments",
+      "headers": [
+        ["Content-Type", "application/json"],
+        ["User-Agent", "ExamplePay-Webhooks/2.1 (+https://payments.example.com)"]
+      ],
+      "body": "{\"id\":\"evt_demo_003\",\"type\":\"payment.refunded\",\"data\":{\"amount\":4200,\"currency\":\"eur\",\"customer\":\"cus_demo_42\""
+    },
+    {
+      "minutes_ago": 9,
+      "method": "POST",
+      "path": "/alerts",
+      "headers": [
+        ["Content-Type", "text/plain; charset=utf-8"],
+        ["User-Agent", "ExampleMonitor/5.0"]
+      ],
+      "body": "ALERT demo-api latency p95 above 800 ms for 5 minutes (https://status.example.com/incidents/demo-1)"
+    },
+    {
+      "minutes_ago": 2,
+      "method": "GET",
+      "path": "/ping",
+      "query": "source=uptime&region=demo-1",
+      "headers": [["User-Agent", "ExampleUptime/1.2"]],
+      "body": ""
+    }
+  ]
+}

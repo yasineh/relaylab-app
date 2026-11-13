@@ -46,6 +46,10 @@ type Options struct {
 	// Per-instance token buckets.
 	EndpointPerMinute, EndpointBurst int
 	IPPerMinute, IPBurst             int
+	// DemoPerMinute and DemoBurst replace the endpoint bucket for demo
+	// users' endpoints (DEMO_INGEST_RATE_PER_MINUTE, DEMO_INGEST_BURST); 0
+	// means demo endpoints use the normal bucket.
+	DemoPerMinute, DemoBurst int
 	// IngestHost, when set, is the only Host ingestion answers on (a separate
 	// ingest domain). Empty means ingestion shares the app host.
 	IngestHost string
@@ -57,6 +61,7 @@ type Options struct {
 type Handler struct {
 	o          Options
 	endpointRL *keyedLimiter
+	demoRL     *keyedLimiter
 	ipRL       *keyedLimiter
 }
 
@@ -65,11 +70,16 @@ func NewHandler(o Options) *Handler {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	return &Handler{
+	h := &Handler{
 		o:          o,
 		endpointRL: newKeyedLimiter(o.EndpointPerMinute, o.EndpointBurst),
 		ipRL:       newKeyedLimiter(o.IPPerMinute, o.IPBurst),
 	}
+	h.demoRL = h.endpointRL
+	if o.DemoPerMinute > 0 && o.DemoBurst > 0 {
+		h.demoRL = newKeyedLimiter(o.DemoPerMinute, o.DemoBurst)
+	}
+	return h
 }
 
 // Routes mounts the ingestion routes on r (the root router). Methods chi does
@@ -190,7 +200,11 @@ func (h *Handler) handle(w http.ResponseWriter, r *http.Request, start time.Time
 		res.endpointID = ep.ID
 		return res
 	}
-	if ok, after := h.endpointRL.allow(ep.ID.String(), start); !ok {
+	rl := h.endpointRL
+	if ep.Demo {
+		rl = h.demoRL
+	}
+	if ok, after := rl.allow(ep.ID.String(), start); !ok {
 		res := rateLimited(after)
 		res.endpointID = ep.ID
 		return res

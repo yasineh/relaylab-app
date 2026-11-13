@@ -24,6 +24,7 @@ type endpointRef struct {
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 	Enabled   bool
+	Demo      bool // owned by a demo user: the demo rate limit applies
 }
 
 // event is one accepted, redacted request ready to store.
@@ -67,19 +68,19 @@ func (s *PGStore) Lookup(ctx context.Context, tokenHash []byte) (endpointRef, er
 	if err != nil {
 		return endpointRef{}, fmt.Errorf("lookup endpoint: %w", err)
 	}
-	return endpointRef{ID: row.ID.Bytes, ProjectID: row.ProjectID.Bytes, Enabled: row.Enabled}, nil
+	return endpointRef{ID: row.ID.Bytes, ProjectID: row.ProjectID.Bytes, Enabled: row.Enabled, Demo: row.IsDemo}, nil
 }
 
-// Save implements Store.
-func (s *PGStore) Save(ctx context.Context, ev event) error {
+// insertParams turns a captured event into the insert row.
+func insertParams(ev event) (store.InsertEventParams, error) {
 	c := ev.Captured
 	params, err := json.Marshal(c.Params)
 	if err != nil {
-		return fmt.Errorf("encode query params: %w", err)
+		return store.InsertEventParams{}, fmt.Errorf("encode query params: %w", err)
 	}
 	headers, err := json.Marshal(c.Headers)
 	if err != nil {
-		return fmt.Errorf("encode headers: %w", err)
+		return store.InsertEventParams{}, fmt.Errorf("encode headers: %w", err)
 	}
 	body := ev.Body
 	if body == nil {
@@ -114,6 +115,15 @@ func (s *PGStore) Save(ctx context.Context, ev event) error {
 	if ev.ReplayID != uuid.Nil {
 		arg.Source = "replay"
 		arg.ReplayAttemptID = pgUUID(ev.ReplayID)
+	}
+	return arg, nil
+}
+
+// Save implements Store.
+func (s *PGStore) Save(ctx context.Context, ev event) error {
+	arg, err := insertParams(ev)
+	if err != nil {
+		return err
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)

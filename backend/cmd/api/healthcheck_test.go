@@ -10,7 +10,7 @@ import (
 func TestProbe(t *testing.T) {
 	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	defer ok.Close()
-	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(503) }))
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusServiceUnavailable) }))
 	defer down.Close()
 	if err := probe(ok.URL+"/healthz", time.Second); err != nil {
 		t.Fatalf("healthy: %v", err)

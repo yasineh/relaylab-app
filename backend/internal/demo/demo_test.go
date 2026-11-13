@@ -224,7 +224,6 @@ func TestCrossDemoIsolation(t *testing.T) {
 	if pa.ID == pb.ID {
 		t.Fatal("two demo users share a project")
 	}
-	rec := a.Do(http.MethodGet, "/api/v1/projects/"+pb.ID+"/events?limit=1", "")
 	ev := decode[list[struct{ ID string }]](t, b.Do(http.MethodGet, "/api/v1/projects/"+pb.ID+"/events?limit=1", "").Body).Items
 	if len(ev) != 1 {
 		t.Fatal("b has no events")
@@ -235,7 +234,7 @@ func TestCrossDemoIsolation(t *testing.T) {
 		"/api/v1/projects/" + pb.ID + "/events/" + ev[0].ID,
 		"/api/v1/projects/" + pb.ID + "/endpoints",
 	} {
-		rec = a.Do(http.MethodGet, path, "")
+		rec := a.Do(http.MethodGet, path, "")
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: %d", path, rec.Code)
 		}

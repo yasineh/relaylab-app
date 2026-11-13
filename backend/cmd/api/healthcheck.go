@@ -33,11 +33,11 @@ func probe(target string, timeout time.Duration) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil) //nolint:gosec // G704: only loopback http URLs pass the check above
 	if err != nil {
 		return err
 	}
-	res, err := http.DefaultClient.Do(req)
+	res, err := http.DefaultClient.Do(req) //nolint:gosec // G704: loopback only, see above
 	if err != nil {
 		return err
 	}

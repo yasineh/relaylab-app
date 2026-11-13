@@ -2,24 +2,44 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
 import { useId, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Tabs } from '@/components/ui/tabs'
 import { useDeleteProject, useUpdateProject, type Project } from '@/features/projects/api'
 import { applyProjectError } from '@/features/projects/errors'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { ProjectFormFields } from '@/features/projects/ProjectFormFields'
 import { projectSchema, toInput, type ProjectFormValues } from '@/features/projects/schema'
+import { ActivityPanel } from '@/features/replay/ActivityPanel'
 
 export function ProjectSettingsPage() {
   const project = useCurrentProject()
+  const [params, setParams] = useSearchParams()
+  const tab = params.get('tab') === 'activity' ? 'activity' : 'general'
   return (
-    <div className="max-w-2xl space-y-8">
-      <DetailsSection project={project} />
-      <DeleteSection project={project} />
+    <div className="max-w-2xl">
+      <Tabs
+        label="Project settings"
+        selected={tab}
+        onSelect={(id) => setParams(id === 'activity' ? { tab: 'activity' } : {}, { replace: true })}
+        tabs={[
+          {
+            id: 'general',
+            label: 'General',
+            panel: (
+              <div className="space-y-8">
+                <DetailsSection project={project} />
+                <DeleteSection project={project} />
+              </div>
+            ),
+          },
+          { id: 'activity', label: 'Activity', panel: <ActivityPanel projectId={project.id} /> },
+        ]}
+      />
     </div>
   )
 }

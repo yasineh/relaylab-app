@@ -151,6 +151,9 @@ func (s *Service) resolve(ctx context.Context, owner string, project, eventID uu
 	sort.Slice(r.overrides, func(i, j int) bool { return r.overrides[i].Name < r.overrides[j].Name })
 	if msg := ValidateOverrides(r.overrides); msg != "" {
 		fields["header_overrides"] = msg
+	} else if len(r.overrides) > 0 && s.sealer == nil {
+		// Values are stored only encrypted; without REPLAY_OVERRIDE_ENC_KEY they cannot be stored.
+		fields["header_overrides"] = "Added headers are not available on this server."
 	}
 	if len(fields) > 0 {
 		return resolved{}, &FieldError{Code: "validation_failed", Fields: fields}

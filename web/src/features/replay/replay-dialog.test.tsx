@@ -119,11 +119,13 @@ describe('replay dialog (6.1)', () => {
 })
 
 describe('replay availability (6.1)', () => {
-  it('shows Replay disabled with an explanation when replay is off', async () => {
-    withReplay({}, { enabled: false })
-    renderApp(`/projects/${PID}/events/${EVENT_ID}`)
-    expect(await screen.findByText(/Replay is unavailable: it is turned off/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Replay' })).toBeDisabled()
+  it('keeps the test sink available and explains URL replay is off when REPLAY_ENABLED is false', async () => {
+    withReplay({}, { enabled: false, url: false })
+    const dialog = await openDialog()
+    expect(within(dialog).getByRole('radio', { name: 'URL' })).toBeDisabled()
+    expect(within(dialog).getByText(/Sending to a URL is turned off on this RelayLab server/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('radio', { name: 'Test sink' })).toBeChecked()
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Send replay' })).toBeEnabled())
   })
 
   it('disables URL destinations when the outbound guard has not reported in', async () => {

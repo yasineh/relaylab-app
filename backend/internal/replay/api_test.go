@@ -35,6 +35,7 @@ type apiEnv struct {
 
 type apiOpts struct {
 	disabled bool
+	noKey    bool // REPLAY_OVERRIDE_ENC_KEY unset
 	limits   func(*config.Replay)
 	limiter  RateLimiter
 }
@@ -52,6 +53,9 @@ func newAPIEnv(t *testing.T, o apiOpts) *apiEnv {
 	sealer, err := NewSealer(testKey)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if o.noKey {
+		sealer = nil
 	}
 	validator := outbound.NewValidator(outbound.Options{AllowedPorts: []int{443, 8443}, BlockedHosts: []string{"relaylab.test"}})
 	e.svc = NewService(e.Pool, red, NewGate(e.limits.Enabled, e.status), validator, sealer, &e.limits, o.limiter)

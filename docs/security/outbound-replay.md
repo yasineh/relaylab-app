@@ -137,12 +137,14 @@ a test that doesn't exist.
 
 ## Replay
 
-- **Off unless enabled.** `REPLAY_ENABLED` defaults to `false` in production
-  and `true` in development. When it is off, the API answers
-  `503 replay_unavailable` and creates nothing. URL replays additionally need
-  a worker heartbeat (every 15 s) reporting an active guard within 60 s; the
-  worker also refuses to send while its own guard is inactive. Sink replays
-  never leave RelayLab and need only `REPLAY_ENABLED`.
+- **URL replay is off unless enabled.** `REPLAY_ENABLED` defaults to `false`
+  in production and `true` in development. When it is off, the API answers
+  URL replays with `503 replay_unavailable` and creates nothing, and a worker
+  fails any URL replay still queued from before (`url_replay_disabled`)
+  without sending it. URL replays also need a worker heartbeat (every 15 s)
+  reporting an active guard within 60 s; the worker also refuses to send
+  while its own guard is inactive. Sink replays never leave RelayLab and are
+  always available.
 - **Test sink.** A sink replay stores a new event on another endpoint of the
   same project (marked `source = replay` with the replay id), through the
   ingestion insert path without HTTP. No socket is opened, so the sink cannot be

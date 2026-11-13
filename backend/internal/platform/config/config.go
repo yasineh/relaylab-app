@@ -30,9 +30,14 @@ type Config struct {
 	HTTPAddr         string
 	WorkerHealthAddr string
 	DatabaseURL      Secret
-	LogLevel         slog.Level
-	TrustedProxies   []netip.Prefix
-	ShutdownGrace    time.Duration
+	// DatabaseDirectURL is a direct (unpooled) connection for LISTEN and
+	// session-level advisory locks (DATABASE_DIRECT_URL). It defaults to
+	// DatabaseURL, which is right whenever DATABASE_URL is not a
+	// transaction-mode pooler.
+	DatabaseDirectURL Secret
+	LogLevel          slog.Level
+	TrustedProxies    []netip.Prefix
+	ShutdownGrace     time.Duration
 	// StreamRevalidate is how often a live event stream re-checks its
 	// session and project (at most a minute, per the live-event-stream spec).
 	StreamRevalidate time.Duration
@@ -89,8 +94,20 @@ func Load(getenv Getenv) (*Config, error) {
 		fail("DATABASE_URL", "is required")
 	} else if err := validateDSN(dsn); err != nil {
 		fail("DATABASE_URL", err.Error())
+	} else if err := requireTLS(dsn, c.Env); err != nil {
+		fail("DATABASE_URL", err.Error())
 	} else {
 		c.DatabaseURL = NewSecret(dsn)
+		c.DatabaseDirectURL = c.DatabaseURL
+	}
+	if direct := strings.TrimSpace(getenv("DATABASE_DIRECT_URL")); direct != "" {
+		if err := validateDSN(direct); err != nil {
+			fail("DATABASE_DIRECT_URL", err.Error())
+		} else if err := requireTLS(direct, c.Env); err != nil {
+			fail("DATABASE_DIRECT_URL", err.Error())
+		} else {
+			c.DatabaseDirectURL = NewSecret(direct)
+		}
 	}
 
 	switch lvl := strings.ToLower(withDefault(getenv("LOG_LEVEL"), "info")); lvl {
@@ -151,6 +168,9 @@ func LoadMigrationURL(getenv Getenv) (Secret, error) {
 	if err := validateDSN(dsn); err != nil {
 		return Secret{}, &FieldError{Var: "MIGRATION_DATABASE_URL", Reason: err.Error()}
 	}
+	if err := requireTLS(dsn, Env(strings.ToLower(strings.TrimSpace(getenv("APP_ENV"))))); err != nil {
+		return Secret{}, &FieldError{Var: "MIGRATION_DATABASE_URL", Reason: err.Error()}
+	}
 	return NewSecret(dsn), nil
 }
 
@@ -172,10 +192,34 @@ func parseOrigin(raw string) (*url.URL, error) {
 // validateDSN checks the URL shape without echoing it back in errors.
 func validateDSN(dsn string) error {
 	u, err := url.Parse(dsn)
-	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || u.Host == "" {
+	if err != nil || (u.Scheme != "postgres" && u.Scheme != "postgresql") || (u.Host == "" && u.Query().Get("host") == "") {
 		return fmt.Errorf("must be a postgres:// connection URL")
 	}
 	return nil
+}
+
+// requireTLS rejects, in production, a database URL that permits a
+// plaintext connection: sslmode must be require, verify-ca, or verify-full
+// (libpq's default, prefer, falls back to plaintext). A Unix socket (Cloud
+// SQL's connector, host=/cloudsql/...) never crosses the network and is
+// allowed.
+func requireTLS(dsn string, env Env) error {
+	if env != EnvProduction {
+		return nil
+	}
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return errors.New("must be a postgres:// connection URL")
+	}
+	q := u.Query()
+	if h := q.Get("host"); strings.HasPrefix(h, "/") {
+		return nil
+	}
+	switch q.Get("sslmode") {
+	case "require", "verify-ca", "verify-full":
+		return nil
+	}
+	return errors.New("must require TLS in production: add sslmode=require (or verify-full)")
 }
 
 func withDefault(v, def string) string {

@@ -44,7 +44,7 @@ func (rc *recorder) Execute(ctx context.Context, job Job) {
 }
 
 func testLimits() *config.Replay {
-	return &config.Replay{ProjectConcurrency: 2, ProjectQueueDepth: 20, MaxTries: 3, LeaseSeconds: 60, MaxLeaseLosses: 3, ResponseExcerptBytes: 64 << 10}
+	return &config.Replay{Enabled: true, ProjectConcurrency: 2, ProjectQueueDepth: 20, MaxTries: 3, LeaseSeconds: 60, MaxLeaseLosses: 3, ResponseExcerptBytes: 64 << 10}
 }
 
 // queueJobs inserts n queued replay.deliver jobs for project.

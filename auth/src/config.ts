@@ -5,6 +5,8 @@
  * config never prints them.
  */
 
+import { tlsProblem } from './dburl.ts'
+
 export type AppEnv = 'development' | 'test' | 'production'
 
 export class Secret {
@@ -98,6 +100,10 @@ export function loadConfig(env: Env = process.env): Config {
 
   const databaseUrl = get('AUTH_DATABASE_URL')
   if (!databaseUrl) problems.push('AUTH_DATABASE_URL: is required')
+  else if (production) {
+    const p = tlsProblem('AUTH_DATABASE_URL', databaseUrl)
+    if (p) problems.push(p)
+  }
 
   const betterAuthSecret = get('BETTER_AUTH_SECRET')
   if (betterAuthSecret.length < MIN_SECRET_LENGTH) {
@@ -118,6 +124,18 @@ export function loadConfig(env: Env = process.env): Config {
     'AUTH_REQUIRE_EMAIL_VERIFICATION',
     problems,
   )
+  // Public sign-up in production is a deliberate decision (D16): it needs an
+  // explicit acknowledgement and email verification.
+  if (production && signupEnabled) {
+    if (!parseBool(get('AUTH_ALLOW_PUBLIC_SIGNUP_ACK'), false, 'AUTH_ALLOW_PUBLIC_SIGNUP_ACK', problems)) {
+      problems.push(
+        'AUTH_SIGNUP_ENABLED: public sign-up in production also needs AUTH_ALLOW_PUBLIC_SIGNUP_ACK=true',
+      )
+    }
+    if (!requireEmailVerification) {
+      problems.push('AUTH_REQUIRE_EMAIL_VERIFICATION: must be true in production while sign-up is enabled')
+    }
+  }
 
   let smtp: SmtpConfig | undefined
   const smtpHost = get('SMTP_HOST')

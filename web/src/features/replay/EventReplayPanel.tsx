@@ -25,7 +25,8 @@ export function EventReplayPanel({
   const endpoints = useEndpoints(projectId)
   const replays = useEventReplays(projectId, event.id)
   const [open, setOpen] = useState(false)
-  const enabled = config.data?.replay_enabled === true
+  // Test-sink replay is always available; replay_enabled governs URL replay only.
+  const urlEnabled = config.data?.replay_enabled === true
 
   const openDialog = () => {
     // Availability can change while the page is open; re-check it.
@@ -39,15 +40,10 @@ export function EventReplayPanel({
         <h2 id="replays-heading" className="flex items-center gap-2 font-medium">
           <History aria-hidden="true" className="size-4 text-primary" /> Replays
         </h2>
-        <Button size="sm" onClick={openDialog} disabled={!enabled || config.isPending}>
+        <Button size="sm" onClick={openDialog} disabled={config.isPending}>
           <Send aria-hidden="true" /> Replay
         </Button>
       </div>
-      {config.data && !enabled ? (
-        <p className="text-sm text-muted-foreground">
-          Replay is unavailable: it is turned off on this RelayLab server.
-        </p>
-      ) : null}
 
       {replays.isPending ? (
         <output className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -90,6 +86,7 @@ export function EventReplayPanel({
         event={event}
         endpoints={endpoints.data ?? []}
         urlAvailable={config.data?.replay_url_available === true}
+        urlEnabled={urlEnabled}
       />
     </section>
   )

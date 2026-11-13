@@ -151,8 +151,8 @@ Replay, read by the API and the worker ([details](security/outbound-replay.md#re
 
 | Variable | Default | Notes |
 |---|---|---|
-| `REPLAY_ENABLED` | `true`; `false` in production | Turns replay on. Production needs an explicit `true` |
-| `REPLAY_OVERRIDE_ENC_KEY` | — (required when replay is on) | 32 bytes, base64. Encrypts header values users add to a replay |
+| `REPLAY_ENABLED` | `true`; `false` in production | Turns replay to URLs on; production needs an explicit `true`. Replay to a test sink always works |
+| `REPLAY_OVERRIDE_ENC_KEY` | — (required when `REPLAY_ENABLED` is on) | 32 bytes, base64. Encrypts header values users add to a replay. Without it, added headers are refused |
 | `REPLAY_PROJECT_CONCURRENCY`, `REPLAY_PROJECT_QUEUE_DEPTH`, `REPLAY_USER_RATE_PER_MINUTE` | 2, 20, 30 | Running per project, waiting or running per project (`429 replay_queue_full`), creations per user per minute (`429 rate_limited`) |
 | `REPLAY_MAX_TRIES`, `REPLAY_LEASE_SECONDS`, `REPLAY_MAX_LEASE_LOSSES` | 3, 60, 3 | Deliveries per replay, worker lease, lease expiries before a job is abandoned (`worker_lost`) |
 | `REPLAY_RESPONSE_EXCERPT_BYTES`, `REPLAY_HISTORY_PAGE_DEFAULT` | 65536, 25 | Stored response body (at most 262144); replay history and activity page size |

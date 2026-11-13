@@ -11,6 +11,7 @@ const base = {
 }
 const prod = {
   ...base,
+  AUTH_DATABASE_URL: 'postgres://auth_runtime:x@db.example.test/relaylab?sslmode=require',
   APP_ENV: 'production',
   APP_ORIGIN: 'https://relaylab.example.test',
   SMTP_HOST: 'smtp.example.test',
@@ -44,7 +45,7 @@ describe('loadConfig', () => {
   })
 
   it('honours explicit switches', () => {
-    const c = loadConfig({ ...prod, AUTH_SIGNUP_ENABLED: 'true', AUTH_REQUIRE_EMAIL_VERIFICATION: 'false' })
+    const c = loadConfig({ ...base, AUTH_SIGNUP_ENABLED: 'true', AUTH_REQUIRE_EMAIL_VERIFICATION: 'false' })
     expect(c.signupEnabled).toBe(true)
     expect(c.requireEmailVerification).toBe(false)
   })
@@ -100,5 +101,40 @@ describe('loadConfig', () => {
       expect(dumped).not.toContain(secret)
     }
     expect(c.betterAuthSecret.reveal()).toBe(base.BETTER_AUTH_SECRET)
+  })
+
+  it('requires a TLS database URL in production, or a Unix socket', () => {
+    for (const url of [
+      'postgres://auth_runtime:hunter2-secret@db.example.test/relaylab',
+      'postgres://auth_runtime:hunter2-secret@db.example.test/relaylab?sslmode=disable',
+      'postgres://auth_runtime:hunter2-secret@db.example.test/relaylab?sslmode=prefer',
+    ]) {
+      const p = problems({ ...prod, AUTH_DATABASE_URL: url })
+      expect(p).toContain(
+        'AUTH_DATABASE_URL: must require TLS in production: add sslmode=require (or verify-full)',
+      )
+      expect(p.join(' ')).not.toContain('hunter2')
+    }
+    expect(problems({ ...prod, AUTH_DATABASE_URL: 'postgres://u:p@/relaylab?host=/cloudsql/p:r:i' })).toEqual(
+      [],
+    )
+    expect(problems({ ...base, AUTH_DATABASE_URL: 'postgres://u:p@localhost/relaylab' })).toEqual([])
+  })
+
+  it('needs an acknowledgement and verification for public sign-up in production', () => {
+    expect(problems({ ...prod, AUTH_SIGNUP_ENABLED: 'true' })).toContain(
+      'AUTH_SIGNUP_ENABLED: public sign-up in production also needs AUTH_ALLOW_PUBLIC_SIGNUP_ACK=true',
+    )
+    expect(
+      problems({
+        ...prod,
+        AUTH_SIGNUP_ENABLED: 'true',
+        AUTH_ALLOW_PUBLIC_SIGNUP_ACK: 'true',
+        AUTH_REQUIRE_EMAIL_VERIFICATION: 'false',
+      }),
+    ).toContain('AUTH_REQUIRE_EMAIL_VERIFICATION: must be true in production while sign-up is enabled')
+    expect(problems({ ...prod, AUTH_SIGNUP_ENABLED: 'true', AUTH_ALLOW_PUBLIC_SIGNUP_ACK: 'true' })).toEqual(
+      [],
+    )
   })
 })

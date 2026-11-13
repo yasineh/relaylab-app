@@ -267,3 +267,23 @@ func TestBlockedAtDialNotRetried(t *testing.T) {
 		t.Fatalf("message leaks the address: %s", *r.FailureMessage)
 	}
 }
+
+// A URL replay queued while URL replay was on, delivered after it was turned
+// off: nothing is sent and the replay fails with url_replay_disabled.
+func TestURLReplayRefusedWhenTurnedOff(t *testing.T) {
+	e := newExecEnv(t)
+	hits := 0
+	url := e.server("example.com", func(w http.ResponseWriter, _ *http.Request) { hits++ })
+	e.limits.Enabled = false
+	e.build()
+	id := e.queue(url, nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.runner.Run(ctx)
+	waitFor(t, 5*time.Second, func() bool {
+		return e.Count(t, `SELECT count(*) FROM app.replay_attempts WHERE id = $1 AND state = 'failed' AND outcome = 'url_replay_disabled'`, id) == 1
+	})
+	if hits != 0 {
+		t.Fatalf("destination reached %d times", hits)
+	}
+}

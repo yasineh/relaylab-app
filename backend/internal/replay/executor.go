@@ -26,9 +26,11 @@ const (
 	CategorySinkDisabled   = "sink_disabled"
 	CategoryWorkerLost     = "worker_lost"
 	CategoryOverrideFailed = "override_unavailable"
+	CategoryURLDisabled    = "url_replay_disabled"
 )
 
 const (
+	urlDisabledMessage    = "Replay to URLs was turned off on this server before this replay was sent. Nothing was sent."
 	workerLostMessage     = "The worker stopped repeatedly while delivering this replay. It may have been delivered more than once."
 	sinkDisabledMessage   = "The test sink endpoint is disabled or was deleted."
 	overrideFailedMessage = "The added headers could not be read, so nothing was sent."
@@ -129,6 +131,11 @@ func (d *Deliverer) Execute(ctx context.Context, job Job) {
 		out = d.deliverSink(ctx, row)
 	default:
 		host = hostOf(row.TargetUrl.String)
+		if !d.limits.Enabled {
+			// Queued while URL replay was on; it has been turned off since.
+			out = outcome{state: "failed", category: CategoryURLDisabled, message: urlDisabledMessage}
+			break
+		}
 		out = d.deliverURL(ctx, job, row)
 	}
 	if errors.Is(ctx.Err(), context.Canceled) {

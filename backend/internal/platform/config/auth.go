@@ -79,6 +79,16 @@ func LoadAuth(getenv Getenv, env Env) (*Auth, error) {
 	if a.RequireEmailVerification, err = parseBool(getenv("AUTH_REQUIRE_EMAIL_VERIFICATION"), true); err != nil {
 		fail("AUTH_REQUIRE_EMAIL_VERIFICATION", err.Error())
 	}
+	// Public sign-up in production is a deliberate decision (D16): it needs an
+	// explicit acknowledgement and email verification.
+	if prod && a.SignupEnabled {
+		if ack, _ := parseBool(getenv("AUTH_ALLOW_PUBLIC_SIGNUP_ACK"), false); !ack {
+			fail("AUTH_SIGNUP_ENABLED", "public sign-up in production also needs AUTH_ALLOW_PUBLIC_SIGNUP_ACK=true")
+		}
+		if !a.RequireEmailVerification {
+			fail("AUTH_REQUIRE_EMAIL_VERIFICATION", "must be true in production while sign-up is enabled")
+		}
+	}
 
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)

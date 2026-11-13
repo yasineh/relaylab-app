@@ -36,7 +36,7 @@ type Gate struct {
 // NewGate returns a gate for REPLAY_ENABLED and the heartbeat store.
 func NewGate(enabled bool, status GuardStatus) *Gate { return &Gate{enabled: enabled, status: status} }
 
-// Enabled reports REPLAY_ENABLED.
+// Enabled reports REPLAY_ENABLED, which governs URL replay only.
 func (g *Gate) Enabled() bool { return g.enabled }
 
 // URLAvailable reports whether URL replay is available now.
@@ -52,12 +52,10 @@ func (g *Gate) URLAvailable(ctx context.Context) (bool, error) {
 }
 
 // Check returns ErrUnavailable when a replay to this destination type may
-// not be created. Sink replays need only REPLAY_ENABLED: they never leave
-// RelayLab, so they do not depend on the outbound guard.
+// not be created. Sink replays are always available: they never leave
+// RelayLab, so neither REPLAY_ENABLED nor the outbound guard applies
+// (add-production-readiness). URL replays need both.
 func (g *Gate) Check(ctx context.Context, destination string) error {
-	if !g.enabled {
-		return ErrUnavailable
-	}
 	if destination == DestinationSink {
 		return nil
 	}

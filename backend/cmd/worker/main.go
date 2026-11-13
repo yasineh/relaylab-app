@@ -3,8 +3,8 @@
 //
 // It runs the retention purge (add-event-retention) every RETENTION_INTERVAL;
 // a database advisory lock lets only one worker purge at a time. It runs
-// replay jobs (add-event-replay, D5) from the Postgres queue when
-// REPLAY_ENABLED is true, and every 15 seconds reports its outbound guard's
+// replay jobs (add-event-replay, D5) from the Postgres queue: test-sink
+// replays always, URL replays only when REPLAY_ENABLED is true, and every 15 seconds reports its outbound guard's
 // self-check to app.worker_heartbeats, which the API reads before offering
 // URL replay. Readiness reports the guard as outbound_guard (active or
 // inactive), and /metrics on the same internal port exposes the outbound,
@@ -100,11 +100,15 @@ func run() int {
 	workerID := newWorkerID()
 	go retention.New(pool, retentionCfg, logger, retention.NewMetrics(registry)).Run(ctx)
 	go replay.NewHeartbeat(pool, workerID, outbound.UserAgent(), guard, logger).Run(ctx)
-	if replayCfg.Enabled {
+	// Replay jobs always run: test-sink replays never leave RelayLab and work
+	// with REPLAY_ENABLED off; URL replays are refused unless it is on.
+	{
 		var sealer *replay.Sealer
-		if sealer, err = replay.NewSealer([]byte(replayCfg.OverrideKey.Reveal())); err != nil {
-			logger.Error("invalid replay override key", slog.String("error", err.Error()))
-			return 1
+		if key := replayCfg.OverrideKey.Reveal(); key != "" {
+			if sealer, err = replay.NewSealer([]byte(key)); err != nil {
+				logger.Error("invalid replay override key", slog.String("error", err.Error()))
+				return 1
+			}
 		}
 		replayMetrics := replay.NewMetrics(registry)
 		deliverer := replay.NewDeliverer(replay.DelivererOptions{

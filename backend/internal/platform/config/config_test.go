@@ -94,6 +94,7 @@ func TestStreamRevalidateDefault(t *testing.T) {
 func TestProductionRequiresHTTPSOrigin(t *testing.T) {
 	env := validEnv()
 	env["APP_ENV"] = "production"
+	env["DATABASE_URL"] = testDSN + "?sslmode=require"
 	_, err := Load(envFrom(env))
 	assertFieldError(t, err, "APP_ORIGIN")
 
@@ -179,4 +180,50 @@ func flatten(err error) []error {
 		return out
 	}
 	return []error{err}
+}
+
+func TestProductionDatabaseURLsRequireTLS(t *testing.T) {
+	base := func(dsn string) map[string]string {
+		return map[string]string{"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com", "DATABASE_URL": dsn}
+	}
+	for _, dsn := range []string{
+		testDSN, testDSN + "?sslmode=disable", testDSN + "?sslmode=allow", testDSN + "?sslmode=prefer",
+	} {
+		_, err := Load(envFrom(base(dsn)))
+		assertFieldError(t, err, "DATABASE_URL")
+		if strings.Contains(err.Error(), "sup3r-s3cret-pw") {
+			t.Fatal("error contains the password")
+		}
+	}
+	for _, dsn := range []string{
+		testDSN + "?sslmode=require", testDSN + "?sslmode=verify-full&sslrootcert=/etc/ca.pem",
+		"postgres://app_runtime:pw@/relaylab?host=/cloudsql/proj:region:inst", // Cloud SQL connector socket
+	} {
+		if _, err := Load(envFrom(base(dsn))); err != nil {
+			t.Errorf("%s rejected: %v", dsn, err)
+		}
+	}
+	// The direct URL gets the same rule, and defaults to DATABASE_URL.
+	env := base(testDSN + "?sslmode=require")
+	c, err := Load(envFrom(env))
+	if err != nil || c.DatabaseDirectURL.Reveal() != c.DatabaseURL.Reveal() {
+		t.Fatalf("direct default: %v", err)
+	}
+	env["DATABASE_DIRECT_URL"] = "postgres://app_runtime:pw@db-direct:5432/relaylab"
+	_, err = Load(envFrom(env))
+	assertFieldError(t, err, "DATABASE_DIRECT_URL")
+	env["DATABASE_DIRECT_URL"] += "?sslmode=require"
+	if c, err = Load(envFrom(env)); err != nil || c.DatabaseDirectURL.Reveal() == c.DatabaseURL.Reveal() {
+		t.Fatalf("direct URL: %v", err)
+	}
+	// Outside production, plaintext local databases are fine.
+	if _, err := Load(envFrom(validEnv())); err != nil {
+		t.Fatal(err)
+	}
+	// The migration URL too.
+	if _, err := LoadMigrationURL(envFrom(map[string]string{"APP_ENV": "production", "MIGRATION_DATABASE_URL": testDSN})); err == nil {
+		t.Fatal("plaintext migration URL accepted in production")
+	} else {
+		assertFieldError(t, err, "MIGRATION_DATABASE_URL")
+	}
 }

@@ -88,8 +88,8 @@ fall back to the web app when it is embedded.
   summaries never include bodies, headers, or query values. Details:
   [API reference](../api.md#get-apiv1projectsprojectideventsstream).
 - **Outbound requests (replay)**: the API validates and queues replays
-  (`/api/v1/projects/{id}/events/{eventId}/replays`, owner-only, behind
-  `REPLAY_ENABLED` and a fresh worker heartbeat). The worker claims them from
+  (`/api/v1/projects/{id}/events/{eventId}/replays`, owner-only; URL
+  replays only behind `REPLAY_ENABLED` and a fresh worker heartbeat). The worker claims them from
   `app.jobs` and is the only process that sends user-directed requests,
   through `internal/replay/outbound`: HTTPS only, public addresses only
   (checked on every DNS answer and on the socket itself), no redirects,

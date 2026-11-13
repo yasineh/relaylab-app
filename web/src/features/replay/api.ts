@@ -189,6 +189,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   sink_disabled: 'sink disabled',
   worker_lost: 'worker lost',
   override_unavailable: 'headers unreadable',
+  url_replay_disabled: 'URL replay turned off',
 }
 
 export const categoryLabel = (c: string | null) =>

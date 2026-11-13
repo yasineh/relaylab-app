@@ -43,7 +43,7 @@ SQL, file paths, or configuration values.
 | 422 | `invalid_destination` | A replay destination that is not allowed (`error.fields` says why) |
 | 429 | `replay_queue_full` | The project already has `REPLAY_PROJECT_QUEUE_DEPTH` replays waiting or running |
 | 429 | `rate_limited` | Replay creations beyond `REPLAY_USER_RATE_PER_MINUTE`; `Retry-After` says when to retry |
-| 503 | `replay_unavailable` | Replay is turned off, or (for URL destinations) no worker has reported an active outbound guard in the last 60 s |
+| 503 | `replay_unavailable` | Replay to URLs is turned off, or no worker has reported an active outbound guard in the last 60 s. Test-sink replays are never refused this way |
 | 422 | `validation_failed` | A field is invalid; `error.fields` maps each field to a message |
 | 431 | `headers_too_large` | Headers over the limit |
 | 500 | `internal_error` | Unexpected failure (details only in server logs) |
@@ -413,9 +413,10 @@ is never changed. Every route requires a session and only works on the
 caller's projects (`404 not_found` otherwise); unsafe methods need the usual
 same-origin and JSON checks. Responses are `Cache-Control: no-store`.
 
-`GET /api/v1/config` reports `replay_enabled` (`REPLAY_ENABLED`) and
-`replay_url_available` (a worker reported an active outbound guard in the last
-60 s). Sink replays need only `replay_enabled`.
+`GET /api/v1/config` reports `replay_enabled` (`REPLAY_ENABLED`, which turns
+on replay to URLs) and `replay_url_available` (also a worker reported an active
+outbound guard in the last 60 s). Replays to a test sink are always available:
+they never leave RelayLab.
 
 #### Request body (preview and create)
 

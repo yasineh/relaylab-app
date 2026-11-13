@@ -40,7 +40,7 @@ func TestGate(t *testing.T) {
 	}{
 		{"enabled, guard active", true, &fakeStatus{active: true}, nil, nil},
 		{"enabled, guard inactive or stale", true, &fakeStatus{}, ErrUnavailable, nil},
-		{"disabled", false, &fakeStatus{active: true}, ErrUnavailable, ErrUnavailable},
+		{"disabled: URL replay only; the sink stays available", false, &fakeStatus{active: true}, ErrUnavailable, nil},
 	} {
 		g := NewGate(tc.enabled, tc.status)
 		if err := g.Check(ctx, DestinationURL); !errors.Is(err, tc.url) {

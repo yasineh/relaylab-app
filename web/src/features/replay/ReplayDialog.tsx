@@ -38,9 +38,20 @@ type Props = {
   endpoints: Endpoint[]
   /** URL replay needs a worker with an active outbound guard. */
   urlAvailable: boolean
+  /** REPLAY_ENABLED on the server: URL replay is turned on at all. Defaults to urlAvailable. */
+  urlEnabled?: boolean
 }
 
-export function ReplayDialog({ open, onClose, onQueued, projectId, event, endpoints, urlAvailable }: Props) {
+export function ReplayDialog({
+  open,
+  onClose,
+  onQueued,
+  projectId,
+  event,
+  endpoints,
+  urlAvailable,
+  urlEnabled = urlAvailable,
+}: Props) {
   // Remount per opening: fresh fields and a fresh Idempotency-Key.
   return open ? (
     <Dialog open onClose={onClose} title="Replay event" size="lg">
@@ -51,12 +62,21 @@ export function ReplayDialog({ open, onClose, onQueued, projectId, event, endpoi
         event={event}
         endpoints={endpoints}
         urlAvailable={urlAvailable}
+        urlEnabled={urlEnabled}
       />
     </Dialog>
   ) : null
 }
 
-function ReplayForm({ onClose, onQueued, projectId, event, endpoints, urlAvailable }: Omit<Props, 'open'>) {
+function ReplayForm({
+  onClose,
+  onQueued,
+  projectId,
+  event,
+  endpoints,
+  urlAvailable,
+  urlEnabled = urlAvailable,
+}: Omit<Props, 'open'>) {
   const sinks = useMemo(
     () => endpoints.filter((e) => e.enabled && e.id !== event.endpoint_id),
     [endpoints, event.endpoint_id],
@@ -158,7 +178,11 @@ function ReplayForm({ onClose, onQueued, projectId, event, endpoints, urlAvailab
             URL
           </label>
         </div>
-        {!urlAvailable ? (
+        {!urlEnabled ? (
+          <p className="text-xs text-muted-foreground">
+            Sending to a URL is turned off on this RelayLab server. The test sink still works.
+          </p>
+        ) : !urlAvailable ? (
           <p className="text-xs text-muted-foreground">
             Sending to a URL is unavailable right now: the outbound safety check has not reported in. The test
             sink still works.

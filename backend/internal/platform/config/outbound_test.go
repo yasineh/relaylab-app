@@ -64,7 +64,7 @@ func TestOutboundRejectsBadValues(t *testing.T) {
 }
 
 func TestOutboundHTTPRefusedInProduction(t *testing.T) {
-	prod := map[string]string{"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com"}
+	prod := map[string]string{"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com", "DATABASE_URL": testDSN + "?sslmode=require"}
 	if _, err := loadOutbound(t, prod); err != nil {
 		t.Fatalf("production without the flag: %v", err)
 	}
@@ -107,6 +107,7 @@ func TestOutboundLimitsDefaultsAndBounds(t *testing.T) {
 func TestTestAllowlistRefusedInProduction(t *testing.T) {
 	_, err := loadOutbound(t, map[string]string{
 		"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com", "REPLAY_TEST_ALLOWLIST": "echo:8080",
+		"DATABASE_URL": testDSN + "?sslmode=require",
 	})
 	assertFieldError(t, err, "REPLAY_TEST_ALLOWLIST")
 }

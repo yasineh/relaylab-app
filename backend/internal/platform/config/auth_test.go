@@ -66,7 +66,7 @@ func TestLoadAuthExplicitSwitches(t *testing.T) {
 		"AUTH_SERVICE_URL":                "http://auth:3001/",
 		"AUTH_SIGNUP_ENABLED":             "true",
 		"AUTH_REQUIRE_EMAIL_VERIFICATION": "false",
-	}), EnvProduction)
+	}), EnvDevelopment)
 	if err != nil {
 		t.Fatalf("LoadAuth: %v", err)
 	}
@@ -126,5 +126,23 @@ func TestAuthSecretsNeverPrinted(t *testing.T) {
 		if strings.Contains(out, s) {
 			t.Fatalf("secret printed: %s", out)
 		}
+	}
+}
+
+func TestPublicSignupInProductionNeedsAckAndVerification(t *testing.T) {
+	load := func(kv map[string]string) error {
+		kv["AUTH_SERVICE_URL"] = "http://localhost:3001"
+		_, err := LoadAuth(authEnv(kv), EnvProduction)
+		return err
+	}
+	assertFieldError(t, load(map[string]string{"AUTH_SIGNUP_ENABLED": "true"}), "AUTH_SIGNUP_ENABLED")
+	assertFieldError(t, load(map[string]string{
+		"AUTH_SIGNUP_ENABLED": "true", "AUTH_ALLOW_PUBLIC_SIGNUP_ACK": "true", "AUTH_REQUIRE_EMAIL_VERIFICATION": "false",
+	}), "AUTH_REQUIRE_EMAIL_VERIFICATION")
+	if err := load(map[string]string{"AUTH_SIGNUP_ENABLED": "true", "AUTH_ALLOW_PUBLIC_SIGNUP_ACK": "true"}); err != nil {
+		t.Fatalf("acknowledged sign-up: %v", err)
+	}
+	if err := load(map[string]string{}); err != nil {
+		t.Fatalf("default (sign-up off): %v", err)
 	}
 }

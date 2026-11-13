@@ -112,18 +112,37 @@ func TestCreateRequiresSessionAndSameOrigin(t *testing.T) {
 }
 
 func TestCreateUnavailable(t *testing.T) {
+	// REPLAY_ENABLED=false (the production default) refuses URL replay only.
 	off := newAPIEnv(t, apiOpts{disabled: true})
-	for _, in := range []map[string]any{urlDest("https://example.com/"), sinkDest(off.sink)} {
-		expectError(t, off.alice.Do(http.MethodPost, off.eventPath(off.event), body(in)), 503, "replay_unavailable")
-	}
+	expectError(t, off.alice.Do(http.MethodPost, off.eventPath(off.event), body(urlDest("https://example.com/"))), 503, "replay_unavailable")
 	e := newAPIEnv(t, apiOpts{})
 	e.status.setActive(false)
 	expectError(t, e.alice.Do(http.MethodPost, e.eventPath(e.event), body(urlDest("https://example.com/"))), 503, "replay_unavailable")
 	if n := e.count("app.replay_attempts") + off.count("app.replay_attempts"); n != 0 {
 		t.Fatalf("%d replays created while unavailable", n)
 	}
+	// Test-sink replay never leaves RelayLab: it works with REPLAY_ENABLED off.
+	if rec := off.alice.Do(http.MethodPost, off.eventPath(off.event), body(sinkDest(off.sink))); rec.Code != 202 {
+		t.Fatalf("sink replay with replay disabled: %d %s", rec.Code, rec.Body)
+	}
 	// The sink still works without an active guard.
 	if rec := e.alice.Do(http.MethodPost, e.eventPath(e.event), body(sinkDest(e.sink))); rec.Code != 202 {
 		t.Fatalf("sink replay: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// Without REPLAY_OVERRIDE_ENC_KEY (allowed while URL replay is off), added
+// headers cannot be stored, so they are refused as a field error.
+func TestOverridesRefusedWithoutKey(t *testing.T) {
+	e := newAPIEnv(t, apiOpts{disabled: true, noKey: true})
+	in := sinkDest(e.sink)
+	in["header_overrides"] = map[string]string{"X-Extra": "1"}
+	rec := e.alice.Do(http.MethodPost, e.eventPath(e.event), body(in))
+	expectError(t, rec, 422, "validation_failed")
+	if !strings.Contains(rec.Body.String(), "Added headers are not available on this server.") {
+		t.Fatalf("body %s", rec.Body)
+	}
+	if rec := e.alice.Do(http.MethodPost, e.eventPath(e.event), body(sinkDest(e.sink))); rec.Code != 202 {
+		t.Fatalf("sink replay without overrides: %d %s", rec.Code, rec.Body)
 	}
 }

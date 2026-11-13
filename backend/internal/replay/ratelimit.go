@@ -26,7 +26,7 @@ func (l *RateLimit) Allow(user string) (bool, time.Duration) {
 	l.mu.Lock()
 	lim, ok := l.users[user]
 	if !ok {
-		lim = rate.NewLimiter(rate.Limit(float64(l.perMinute)/60), l.perMinute)
+		lim = rate.NewLimiter(rate.Every(time.Minute/time.Duration(l.perMinute)), l.perMinute)
 		l.users[user] = lim
 	}
 	l.mu.Unlock()

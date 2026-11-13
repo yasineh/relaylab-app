@@ -35,6 +35,7 @@ type event struct {
 	Body       []byte
 	Class      classification
 	RequestID  string
+	ReplayID   uuid.UUID // set for events stored by a replay to a test sink
 }
 
 // Store is the persistence ingestion needs. Tests substitute failures.
@@ -108,6 +109,11 @@ func (s *PGStore) Save(ctx context.Context, ev event) error {
 		SourceIpPrefix:      ip,
 		UserAgent:           optText(c.UserAgent),
 		CorrelationID:       ev.RequestID,
+		Source:              "ingest",
+	}
+	if ev.ReplayID != uuid.Nil {
+		arg.Source = "replay"
+		arg.ReplayAttemptID = pgUUID(ev.ReplayID)
 	}
 	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		q := store.New(tx)

@@ -89,6 +89,13 @@ CREATE INDEX replay_attempts_sink_idx ON app.replay_attempts (sink_endpoint_id) 
 
 COMMENT ON TABLE app.replay_attempts IS 'Replays of stored events; override values only encrypted and erased when terminal';
 
+-- Events created by a replay to a test sink are marked with their origin.
+-- The reference is cleared when the replay is deleted.
+ALTER TABLE app.webhook_events
+  ADD COLUMN source text NOT NULL DEFAULT 'ingest' CHECK (source IN ('ingest', 'replay')),
+  ADD COLUMN replay_attempt_id uuid REFERENCES app.replay_attempts (id) ON DELETE SET NULL,
+  ADD CONSTRAINT webhook_events_source_consistent CHECK (source = 'replay' OR replay_attempt_id IS NULL);
+
 -- Workers report the outbound guard's self-check here; the API offers URL
 -- replay only while a recent heartbeat says active.
 CREATE TABLE app.worker_heartbeats (
@@ -100,6 +107,8 @@ CREATE TABLE app.worker_heartbeats (
 
 -- +goose Down
 DROP TABLE app.worker_heartbeats;
+ALTER TABLE app.webhook_events DROP CONSTRAINT webhook_events_source_consistent,
+  DROP COLUMN replay_attempt_id, DROP COLUMN source;
 DROP TABLE app.replay_attempts;
 DROP TABLE app.jobs;
 ALTER TABLE app.webhook_events DROP CONSTRAINT webhook_events_id_project_key;

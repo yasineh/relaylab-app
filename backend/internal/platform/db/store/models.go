@@ -114,6 +114,8 @@ type AppWebhookEvent struct {
 	SourceIpPrefix      *netip.Addr
 	UserAgent           pgtype.Text
 	CorrelationID       string
+	Source              string
+	ReplayAttemptID     pgtype.UUID
 }
 
 type AppWorkerHeartbeat struct {

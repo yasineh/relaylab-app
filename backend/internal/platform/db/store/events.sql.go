@@ -189,11 +189,11 @@ const insertEvent = `-- name: InsertEvent :exec
 INSERT INTO app.webhook_events (
   id, endpoint_id, project_id, received_at, method, path, raw_query, query_params,
   headers, redacted_header_count, content_type, body, body_size, body_encoding,
-  body_json, json_invalid, source_ip_prefix, user_agent, correlation_id
+  body_json, json_invalid, source_ip_prefix, user_agent, correlation_id, source, replay_attempt_id
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8,
   $9, $10, $11, $12, $13, $14,
-  $15, $16, $17, $18, $19
+  $15, $16, $17, $18, $19, $20, $21
 )
 `
 
@@ -217,6 +217,8 @@ type InsertEventParams struct {
 	SourceIpPrefix      *netip.Addr
 	UserAgent           pgtype.Text
 	CorrelationID       string
+	Source              string
+	ReplayAttemptID     pgtype.UUID
 }
 
 // Webhook event queries. Ingestion runs these without an owner: the endpoint
@@ -243,6 +245,8 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error 
 		arg.SourceIpPrefix,
 		arg.UserAgent,
 		arg.CorrelationID,
+		arg.Source,
+		arg.ReplayAttemptID,
 	)
 	return err
 }

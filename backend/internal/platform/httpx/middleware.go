@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"regexp"
 	"runtime/debug"
 	"strings"
@@ -50,7 +51,11 @@ func RequestIDMiddleware(base *slog.Logger) func(http.Handler) http.Handler {
 			}
 			w.Header().Set(RequestIDHeader, id)
 			ctx := context.WithValue(r.Context(), requestIDKey{}, id)
-			ctx = logging.WithLogger(ctx, base.With(slog.String("request_id", id)))
+			l := base.With(slog.String("request_id", id))
+			if t := traceName(r.Header.Get("X-Cloud-Trace-Context")); t != "" {
+				l = l.With(slog.String(logging.TraceKey, t))
+			}
+			ctx = logging.WithLogger(ctx, l)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -131,10 +136,7 @@ func AccessLog(next http.Handler) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w}
 		next.ServeHTTP(rec, r)
 
-		route := "unmatched"
-		if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
-			route = rc.RoutePattern()
-		}
+		route := routePattern(r)
 		status := rec.status
 		if status == 0 {
 			status = http.StatusOK
@@ -161,9 +163,14 @@ func Recoverer(next http.Handler) http.Handler {
 				if err, ok := v.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 					panic(v)
 				}
+				// One Cloud Error Reporting entry: the panic and stack go to the
+				// log only, never to the response. No request headers or body.
 				logging.FromContext(r.Context()).Error("panic recovered",
+					slog.String("@type", logging.ErrorReportingType),
 					slog.String("panic", fmt.Sprint(v)),
-					slog.String("stack", string(debug.Stack())),
+					slog.String("stack_trace", fmt.Sprintf("panic: %v\n\n%s", v, debug.Stack())),
+					slog.String("method", r.Method),
+					slog.String("route", routePattern(r)),
 				)
 				WriteError(w, r, http.StatusInternalServerError, "internal_error", "An unexpected error occurred.")
 			}
@@ -224,4 +231,33 @@ func BodyLimit(maxBytes int) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// traceProject is the Google Cloud project for trace correlation
+// (GOOGLE_CLOUD_PROJECT). Without it no trace field is logged.
+var traceProject = os.Getenv("GOOGLE_CLOUD_PROJECT")
+
+var traceID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// traceName turns Cloud Run's X-Cloud-Trace-Context ("TRACE/SPAN;o=1") into
+// Cloud Logging's trace name, or "" when the header or project is missing
+// or the trace id is malformed (the header is client-supplied off Cloud Run).
+func traceName(header string) string {
+	if traceProject == "" || header == "" {
+		return ""
+	}
+	t, _, _ := strings.Cut(header, "/")
+	if !traceID.MatchString(t) {
+		return ""
+	}
+	return "projects/" + traceProject + "/traces/" + t
+}
+
+// routePattern is the matched chi pattern (never the raw path, which can
+// carry endpoint tokens), or "unmatched".
+func routePattern(r *http.Request) string {
+	if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
+		return rc.RoutePattern()
+	}
+	return "unmatched"
 }

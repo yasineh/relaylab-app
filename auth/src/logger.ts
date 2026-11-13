@@ -33,13 +33,24 @@ export const REDACT_PATHS = [
   'body',
 ]
 
+/** pino level labels to Cloud Logging severities. */
+const SEVERITY: Record<string, string> = {
+  trace: 'DEBUG',
+  debug: 'DEBUG',
+  info: 'INFO',
+  warn: 'WARNING',
+  error: 'ERROR',
+  fatal: 'CRITICAL',
+}
+
 export function createLogger(level: string, destination?: DestinationStream): Logger {
   return pino(
     {
       level,
       base: { service: 'relaylab-auth' },
       timestamp: pino.stdTimeFunctions.isoTime,
-      formatters: { level: (label) => ({ level: label }) },
+      // "severity" is what Cloud Logging reads; "level" stays for local reading.
+      formatters: { level: (label) => ({ level: label, severity: SEVERITY[label] ?? 'DEFAULT' }) },
       redact: { paths: REDACT_PATHS, censor: '[REDACTED]' },
     },
     destination,

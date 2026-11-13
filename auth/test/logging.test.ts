@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
+import { createLogger } from '../src/logger.ts'
 import { createTestDatabase, type TestDatabase } from './helpers/db.ts'
 import {
   TEST_PROXY_SECRET,
@@ -85,5 +86,18 @@ describe('credential-safe logging', () => {
     expect(logs).not.toMatch(/token=/)
     // Users are identified by id.
     expect(logs).toMatch(/"userId":"[A-Za-z0-9]+"/)
+  })
+})
+
+describe('Cloud Logging severity', () => {
+  it('adds severity next to level', () => {
+    const lines: string[] = []
+    const log = createLogger('debug', { write: (l: string) => void lines.push(l) })
+    log.debug('d')
+    log.info('i')
+    log.warn('w')
+    log.error('e')
+    expect(lines.map((l) => JSON.parse(l).severity)).toEqual(['DEBUG', 'INFO', 'WARNING', 'ERROR'])
+    expect(JSON.parse(lines[0]!).level).toBe('debug')
   })
 })

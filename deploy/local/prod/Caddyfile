@@ -1,0 +1,12 @@
+# Production-mode local stack: TLS in front of the api, so Secure cookies and
+# the production origin checks behave as on Cloud Run.
+{
+	local_certs
+	skip_install_trust
+	admin off
+}
+
+https://localhost:8443 {
+	tls internal
+	reverse_proxy api:8080
+}

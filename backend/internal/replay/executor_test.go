@@ -102,7 +102,7 @@ func (e *execEnv) build() {
 		Pool: e.Pool, Sender: client, Sealer: e.sealer, Red: red, Limits: e.limits, Metrics: e.metrics,
 		Backoff: []time.Duration{10 * time.Millisecond, 20 * time.Millisecond},
 	})
-	e.runner = NewRunner(RunnerOptions{Pool: e.Pool, WorkerID: "w1", Limits: e.limits, Slots: 4, Executor: e.deliverer})
+	e.runner = NewRunner(RunnerOptions{Pool: e.Pool, WorkerID: "w1", Limits: e.limits, Slots: 4, Executor: e.deliverer, Metrics: e.metrics})
 	e.deliverer.Bind(e.runner)
 }
 

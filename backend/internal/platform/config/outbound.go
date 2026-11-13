@@ -1,7 +1,9 @@
 package config
 
 import (
+	"net"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -46,6 +48,12 @@ type Outbound struct {
 	// INGEST_BASE_URL) and the database host(s) from DATABASE_URL. Built-in
 	// rules for internal names (localhost, *.internal, ...) apply in addition.
 	BlockedHosts []string
+	// TestAllowlist lists exact "host:port" destinations the end-to-end test
+	// stack may reach although they are internal (REPLAY_TEST_ALLOWLIST, for
+	// example "echo:8080"). Only DNS names, never IP literals or RelayLab's
+	// own hosts. Plain HTTP is allowed to these entries only. Refused when
+	// APP_ENV=production.
+	TestAllowlist []string
 }
 
 // LoadOutbound reads OUTBOUND_ALLOW_HTTP, OUTBOUND_ALLOWED_PORTS, and
@@ -132,7 +140,56 @@ func LoadOutbound(getenv Getenv, cfg *Config) (*Outbound, error) {
 	for _, h := range dsnHosts(cfg.DatabaseURL.Reveal()) {
 		add(h)
 	}
+	if o.TestAllowlist, err = loadTestAllowlist(getenv, cfg.Env, o.BlockedHosts); err != nil {
+		return nil, err
+	}
 	return o, nil
+}
+
+const testAllowlistEnv = "REPLAY_TEST_ALLOWLIST"
+
+var allowlistHost = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$`)
+
+// loadTestAllowlist reads REPLAY_TEST_ALLOWLIST: comma-separated host:port
+// entries for the end-to-end test stack. It is an escape hatch through the
+// outbound guard, so it is refused in production, and entries can never name
+// an IP literal or a host the guard always blocks for RelayLab itself.
+func loadTestAllowlist(getenv Getenv, env Env, blocked []string) ([]string, error) {
+	raw := strings.TrimSpace(getenv(testAllowlistEnv))
+	if raw == "" {
+		return nil, nil
+	}
+	if env == EnvProduction {
+		return nil, &FieldError{Var: testAllowlistEnv, Reason: "is for the end-to-end test stack only and must not be set in production"}
+	}
+	var out []string
+	for _, e := range splitList(raw) {
+		host, portStr, err := net.SplitHostPort(strings.ToLower(e))
+		port, perr := strconv.Atoi(portStr)
+		if err != nil || perr != nil || port < 1 || port > 65535 || !allowlistHost.MatchString(host) || isNumericHost(host) {
+			return nil, &FieldError{Var: testAllowlistEnv, Reason: "must be a comma-separated list of host:port entries with DNS host names, such as echo:8080"}
+		}
+		for _, b := range blocked {
+			if host == b || strings.HasSuffix(host, "."+b) {
+				return nil, &FieldError{Var: testAllowlistEnv, Reason: "must not name RelayLab's own hosts, the database, or metadata hosts"}
+			}
+		}
+		entry := host + ":" + strconv.Itoa(port)
+		if !slices.Contains(out, entry) {
+			out = append(out, entry)
+		}
+	}
+	return out, nil
+}
+
+// isNumericHost reports whether every label is digits (an IPv4-like literal).
+func isNumericHost(h string) bool {
+	for _, l := range strings.Split(h, ".") {
+		if strings.Trim(l, "0123456789") != "" {
+			return false
+		}
+	}
+	return true
 }
 
 // dsnHosts returns the host names in a postgres:// URL, including every host

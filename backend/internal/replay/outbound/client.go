@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -32,6 +33,10 @@ type Options struct {
 	AllowHTTP    bool
 	AllowedPorts []int
 	BlockedHosts []string
+	// TestAllowlist is REPLAY_TEST_ALLOWLIST: exact "host:port" entries the
+	// end-to-end stack may reach although internal. Config refuses it in
+	// production. Empty everywhere else.
+	TestAllowlist []string
 
 	ConnectTimeout         time.Duration // TCP connect, and each DNS lookup
 	TLSHandshakeTimeout    time.Duration
@@ -97,6 +102,9 @@ type Client struct {
 	http     *http.Client
 	sem      chan struct{}
 	active   atomic.Bool
+	// testAddrs are socket addresses that allowlisted test names resolved
+	// to; the dial-time check admits exactly these.
+	testAddrs sync.Map // netip.AddrPort -> struct{}
 	logger   *slog.Logger
 }
 
@@ -114,7 +122,7 @@ func New(o Options) *Client {
 	if c.logger == nil {
 		c.logger = slog.New(slog.DiscardHandler)
 	}
-	c.pol = newPolicy(o.AllowHTTP, o.AllowedPorts, o.BlockedHosts)
+	c.pol = newPolicy(o.AllowHTTP, o.AllowedPorts, o.BlockedHosts, o.TestAllowlist)
 	c.pol.allow = o.allow
 	if o.isPublic != nil {
 		c.pol.isPublic = o.isPublic
@@ -150,6 +158,10 @@ func New(o Options) *Client {
 	c.active.Store(c.selfCheck())
 	if !c.active.Load() {
 		c.logger.Error("outbound guard self-check failed; outbound requests are disabled")
+	}
+	if len(o.TestAllowlist) > 0 {
+		c.logger.Warn("REPLAY_TEST_ALLOWLIST is set: these internal destinations are reachable (end-to-end tests only)",
+			slog.Any("destinations", o.TestAllowlist))
 	}
 	return c
 }
@@ -280,10 +292,14 @@ func (c *Client) resolve(ctx context.Context, name string, port int) ([]netip.Ad
 	if err != nil || len(addrs) == 0 {
 		return nil, fail(DNSFailure)
 	}
+	testOnly := c.pol.testAllowed(name, port)
 	out := make([]netip.Addr, len(addrs))
 	for i, a := range addrs {
 		a = ippolicy.Normalize(a)
-		if !c.pol.addrAllowed(a, port) {
+		if testOnly {
+			// An allowlisted test name: admit exactly what it resolves to, at this port.
+			c.testAddrs.Store(netip.AddrPortFrom(a, uint16(port)), struct{}{}) //nolint:gosec // port validated 1-65535
+		} else if !c.pol.addrAllowed(a, port) {
 			return nil, fail(BlockedAddress)
 		}
 		out[i] = a
@@ -338,7 +354,11 @@ func (c *Client) control(_, address string, _ syscall.RawConn) error {
 	if err != nil {
 		return fail(BlockedAddress)
 	}
-	if !c.pol.addrAllowed(ippolicy.Normalize(ap.Addr()), int(ap.Port())) {
+	ap = netip.AddrPortFrom(ippolicy.Normalize(ap.Addr()), ap.Port())
+	if _, ok := c.testAddrs.Load(ap); ok {
+		return nil
+	}
+	if !c.pol.addrAllowed(ap.Addr(), int(ap.Port())) {
 		return fail(BlockedAddress)
 	}
 	return nil

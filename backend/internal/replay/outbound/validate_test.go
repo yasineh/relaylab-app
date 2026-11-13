@@ -10,7 +10,7 @@ func testPolicy(allowHTTP bool) policy {
 	if allowHTTP {
 		ports = append(ports, 80)
 	}
-	return newPolicy(allowHTTP, ports, []string{"relaylab.example.com", "db.example.net", "metadata.google.internal", "metadata"})
+	return newPolicy(allowHTTP, ports, []string{"relaylab.example.com", "db.example.net", "metadata.google.internal", "metadata"}, nil)
 }
 
 func expectCategory(t *testing.T, p policy, raw string, want Category) {

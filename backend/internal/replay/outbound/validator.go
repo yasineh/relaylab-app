@@ -9,7 +9,7 @@ type Validator struct{ pol policy }
 // NewValidator returns a validator with the same policy a Client built from o
 // enforces.
 func NewValidator(o Options) *Validator {
-	return &Validator{pol: newPolicy(o.AllowHTTP, o.AllowedPorts, o.BlockedHosts)}
+	return &Validator{pol: newPolicy(o.AllowHTTP, o.AllowedPorts, o.BlockedHosts, o.TestAllowlist)}
 }
 
 // Validate returns nil when raw passes pre-flight, or the failure.

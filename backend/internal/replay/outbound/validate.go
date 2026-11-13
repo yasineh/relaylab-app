@@ -22,6 +22,14 @@ type policy struct {
 	// allow lets package tests reach exact loopback test servers. It is nil
 	// outside tests and cannot be set from other packages.
 	allow func(netip.AddrPort) bool
+	// testAllow holds REPLAY_TEST_ALLOWLIST "host:port" entries (end-to-end
+	// stack only; refused in production by config).
+	testAllow map[string]bool
+}
+
+// testAllowed reports whether name:port is an allowlisted test destination.
+func (p policy) testAllowed(name string, port int) bool {
+	return len(p.testAllow) > 0 && p.testAllow[name+":"+strconv.Itoa(port)]
 }
 
 func (p policy) addrAllowed(a netip.Addr, port int) bool {
@@ -54,11 +62,7 @@ func (p policy) validateURL(raw string) (destination, *Error) {
 		return destination{}, fail(InvalidURL)
 	}
 	switch u.Scheme {
-	case "https":
-	case "http":
-		if !p.allowHTTP {
-			return destination{}, fail(BlockedScheme)
-		}
+	case "https", "http": // http is checked below, once the host is known
 	default: // file:, gopher:, data:, ws:, scheme-relative //host, ...
 		return destination{}, fail(BlockedScheme)
 	}
@@ -80,6 +84,15 @@ func (p policy) validateURL(raw string) (destination, *Error) {
 		}
 		port = n
 	}
+	if !t.isIP() && p.testAllowed(t.name, port) {
+		// An allowlisted test destination: its scheme, port, and internal
+		// name are accepted; DNS answers are pinned at dial time.
+		u.Fragment, u.RawFragment = "", ""
+		return destination{url: u, target: t, port: port}, nil
+	}
+	if u.Scheme == "http" && !p.allowHTTP {
+		return destination{}, fail(BlockedScheme)
+	}
 	if !p.ports[port] {
 		return destination{}, fail(BlockedPort)
 	}
@@ -94,10 +107,16 @@ func (p policy) validateURL(raw string) (destination, *Error) {
 	return destination{url: u, target: t, port: port}, nil
 }
 
-func newPolicy(allowHTTP bool, ports []int, blocked []string) policy {
+func newPolicy(allowHTTP bool, ports []int, blocked, testAllow []string) policy {
 	p := policy{allowHTTP: allowHTTP, ports: map[int]bool{}, hosts: hostBlocklist{configured: blocked}, isPublic: ippolicy.IsPublic}
 	for _, n := range ports {
 		p.ports[n] = true
+	}
+	if len(testAllow) > 0 {
+		p.testAllow = map[string]bool{}
+		for _, e := range testAllow {
+			p.testAllow[e] = true
+		}
 	}
 	return p
 }

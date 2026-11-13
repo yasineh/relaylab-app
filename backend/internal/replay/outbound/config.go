@@ -12,6 +12,7 @@ func OptionsFrom(c *config.Outbound, userAgent string, logger *slog.Logger, m *M
 		AllowHTTP:             c.AllowHTTP,
 		AllowedPorts:          c.AllowedPorts,
 		BlockedHosts:          c.BlockedHosts,
+		TestAllowlist:         c.TestAllowlist,
 		ConnectTimeout:        c.ConnectTimeout,
 		TLSHandshakeTimeout:   c.TLSHandshakeTimeout,
 		ResponseHeaderTimeout: c.ResponseHeaderTimeout,

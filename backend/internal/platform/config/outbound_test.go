@@ -103,3 +103,33 @@ func TestOutboundLimitsDefaultsAndBounds(t *testing.T) {
 		t.Fatalf("%+v %v", o, err)
 	}
 }
+
+func TestTestAllowlistRefusedInProduction(t *testing.T) {
+	_, err := loadOutbound(t, map[string]string{
+		"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com", "REPLAY_TEST_ALLOWLIST": "echo:8080",
+	})
+	assertFieldError(t, err, "REPLAY_TEST_ALLOWLIST")
+}
+
+func TestTestAllowlistParsing(t *testing.T) {
+	o, err := loadOutbound(t, map[string]string{"REPLAY_TEST_ALLOWLIST": "Echo:8080, echo:8080,echo-2.e2e:9000"})
+	if err != nil || !slices.Equal(o.TestAllowlist, []string{"echo:8080", "echo-2.e2e:9000"}) {
+		t.Fatalf("%v %v", o.TestAllowlist, err)
+	}
+	none, err := loadOutbound(t, nil)
+	if err != nil || none.TestAllowlist != nil {
+		t.Fatalf("default: %v %v", none.TestAllowlist, err)
+	}
+	for _, bad := range []string{
+		"echo", "echo:0", "echo:http", "10.0.0.5:8080", "[::1]:8080", "127.1:80", "http://echo:8080",
+		"localhost:5173", // APP_ORIGIN's host in development
+		"metadata:80", "metadata.google.internal:80",
+	} {
+		_, err := loadOutbound(t, map[string]string{"REPLAY_TEST_ALLOWLIST": bad})
+		if err == nil {
+			t.Errorf("%q accepted", bad)
+			continue
+		}
+		assertFieldError(t, err, "REPLAY_TEST_ALLOWLIST")
+	}
+}

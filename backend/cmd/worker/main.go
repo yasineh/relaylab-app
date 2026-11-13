@@ -141,7 +141,7 @@ func run() int {
 	}
 	logger.Info("worker started", slog.String("health_addr", ln.Addr().String()),
 		slog.String("worker_id", workerID), slog.Bool("replay_enabled", replayCfg.Enabled),
-		slog.Duration("retention_event_ttl", retentionCfg.EventTTL), slog.Int("retention_max_events_per_project", retentionCfg.MaxEventsPerProject))
+		slog.String("retention_event_ttl", retentionCfg.EventTTL.String()), slog.Int("retention_max_events_per_project", retentionCfg.MaxEventsPerProject))
 
 	if err := httpx.Serve(ctx, srv, ln, cfg.ShutdownGrace, checker.MarkShuttingDown); err != nil {
 		logger.Error("worker health server stopped with error", slog.String("error", err.Error()))

@@ -26,6 +26,7 @@ const config: Config = {
   requireEmailVerification: true,
   mailFrom: 'test@relaylab.test',
   rateLimitEnabled: false,
+  demo: { enabled: false, ttlMs: 0, startsPerHour: 1 },
 }
 
 let server: Server

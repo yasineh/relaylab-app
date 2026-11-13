@@ -3,7 +3,7 @@ import { ConfigError, loadConfig } from './config.ts'
 import { checkReady, createPool } from './db.ts'
 import { createLogger } from './logger.ts'
 import { MemoryMailer, createSmtpMailer } from './mailer.ts'
-import { startRateLimitPruner } from './retention.ts'
+import { startDemoPurge, startRateLimitPruner } from './retention.ts'
 import { createAuthServer } from './server.ts'
 
 const SHUTDOWN_GRACE_MS = 15_000
@@ -36,6 +36,8 @@ const server = createAuthServer({
 })
 
 const stopPruner = startRateLimitPruner(pool, logger)
+// Expired demo users are purged even after DEMO_ENABLED is turned off.
+const stopDemoPurge = startDemoPurge(pool, logger, config.demo.ttlMs)
 
 server.listen(config.port, () => {
   logger.info(
@@ -50,6 +52,7 @@ function shutdown(signal: string): void {
   stopping = true
   logger.info({ signal }, 'shutting down')
   stopPruner()
+  stopDemoPurge()
   const force = setTimeout(() => process.exit(1), SHUTDOWN_GRACE_MS)
   force.unref()
   server.close(() => {

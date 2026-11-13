@@ -1,5 +1,6 @@
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { anonymous } from 'better-auth/plugins'
 import type { Pool } from 'pg'
 import type { Logger } from 'pino'
 
@@ -122,8 +123,16 @@ export function authOptions({ config, pool, mailer, logger }: AuthDeps) {
       storage: 'database',
       window: RATE_LIMIT_DEFAULT_WINDOW,
       max: 100,
-      customRules: { ...RATE_LIMIT_RULES },
+      customRules: {
+        ...RATE_LIMIT_RULES,
+        // Each demo creates a user and a seeded workspace: limit per client IP.
+        '/sign-in/anonymous': { window: 3600, max: config.demo.startsPerHour },
+      },
     },
+    // Demo workspaces (D16): visitors sign in as anonymous users. The plugin
+    // also defines the user.isAnonymous column, so migrations always include
+    // it; the sign-in endpoint exists only when DEMO_ENABLED is true.
+    plugins: config.demo.enabled ? [demoPlugin()] : [],
     databaseHooks: {
       session: {
         create: {
@@ -152,6 +161,14 @@ export function authOptions({ config, pool, mailer, logger }: AuthDeps) {
       }),
     },
   } satisfies BetterAuthOptions
+}
+
+/** Demo users: the reserved .invalid domain, so no address can ever be real. */
+export function demoPlugin() {
+  return anonymous({
+    emailDomainName: 'demo.relaylab.invalid',
+    generateName: () => 'Demo visitor',
+  })
 }
 
 export function createAuth(deps: AuthDeps) {

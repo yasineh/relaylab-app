@@ -25,6 +25,9 @@ function schemaConfig(): Config {
     mailFrom: 'unused@localhost',
     // Must stay true: database-backed rate limiting adds the rateLimit table.
     rateLimitEnabled: true,
+    // Must stay enabled: the anonymous plugin adds user.isAnonymous, which the
+    // Go API reads whether or not demos are turned on.
+    demo: { enabled: true, ttlMs: 0, startsPerHour: 1 },
   }
 }
 

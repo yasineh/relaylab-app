@@ -49,3 +49,46 @@ export function startRateLimitPruner(pool: Pool, logger: Logger, intervalMs = PR
   timer.unref()
   return () => clearInterval(timer)
 }
+
+/**
+ * Deletes demo users (Better Auth anonymous users) created more than `ttlMs`
+ * ago, in batches. Foreign keys cascade: their sessions and accounts, and in
+ * the app schema their projects, endpoints, events, replays, jobs, audit
+ * entries, and demo workspace row. Real users are never touched
+ * ("isAnonymous" is true only for demo users).
+ */
+export async function pruneExpiredDemoUsers(pool: Pool, ttlMs: number): Promise<number> {
+  let total = 0
+  for (;;) {
+    const res = await pool.query(
+      `DELETE FROM auth."user" WHERE id IN (
+         SELECT id FROM auth."user"
+         WHERE "isAnonymous" IS TRUE AND "createdAt" < now() - make_interval(secs => $1::float8)
+         LIMIT $2)`,
+      [ttlMs / 1000, BATCH_ROWS],
+    )
+    const n = res.rowCount ?? 0
+    total += n
+    if (n < BATCH_ROWS) return total
+  }
+}
+
+/** Purges expired demo users now and every PRUNE_INTERVAL_MS; returns a stop function. */
+export function startDemoPurge(
+  pool: Pool,
+  logger: Logger,
+  ttlMs: number,
+  intervalMs = PRUNE_INTERVAL_MS,
+): () => void {
+  const run = () => {
+    pruneExpiredDemoUsers(pool, ttlMs).then(
+      (deleted) => logger.info({ deleted }, 'expired demo users deleted'),
+      (err: unknown) =>
+        logger.error({ error: err instanceof Error ? err.message : 'unknown' }, 'demo purge failed'),
+    )
+  }
+  run()
+  const timer = setInterval(run, intervalMs)
+  timer.unref()
+  return () => clearInterval(timer)
+}

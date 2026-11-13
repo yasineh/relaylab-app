@@ -137,4 +137,20 @@ describe('loadConfig', () => {
       [],
     )
   })
+
+  it('reads demo settings: on outside production by default, off in production', () => {
+    expect(loadConfig(base).demo).toEqual({ enabled: true, ttlMs: 24 * 3_600_000, startsPerHour: 10 })
+    expect(loadConfig(prod).demo.enabled).toBe(false)
+    const c = loadConfig({ ...prod, DEMO_ENABLED: 'true', DEMO_TTL: '90m', DEMO_STARTS_PER_HOUR: '3' })
+    expect(c.demo).toEqual({ enabled: true, ttlMs: 90 * 60_000, startsPerHour: 3 })
+    expect(problems({ ...base, DEMO_TTL: '1d' })).toContain(
+      'DEMO_TTL: must be a duration from 1m to 168h, such as 24h',
+    )
+    expect(problems({ ...base, DEMO_TTL: '200h' })).toContain(
+      'DEMO_TTL: must be a duration from 1m to 168h, such as 24h',
+    )
+    expect(problems({ ...base, DEMO_STARTS_PER_HOUR: '0' })).toContain(
+      'DEMO_STARTS_PER_HOUR: must be a whole number from 1 to 1000',
+    )
+  })
 })

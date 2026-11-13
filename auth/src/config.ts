@@ -51,6 +51,25 @@ export interface Config {
   smtp?: SmtpConfig
   /** Rate limiting is on everywhere; only unit tests may switch it off. */
   rateLimitEnabled: boolean
+  /** Demo workspaces (D16): Better Auth anonymous users, deleted after `ttlMs`. */
+  demo: DemoConfig
+}
+
+export interface DemoConfig {
+  /** DEMO_ENABLED: the anonymous sign-in endpoint exists only when true. */
+  enabled: boolean
+  /** DEMO_TTL (for example 24h): demo users older than this are deleted. */
+  ttlMs: number
+  /** DEMO_STARTS_PER_HOUR: demos one client IP may start per hour. */
+  startsPerHour: number
+}
+
+/** Parses DEMO_TTL, a Go-style duration in whole minutes or hours: "90m", "24h". */
+export function parseDemoTtl(raw: string): number | null {
+  const m = /^(\d+)(m|h)$/.exec(raw)
+  if (!m) return null
+  const ms = Number(m[1]) * (m[2] === 'h' ? 3_600_000 : 60_000)
+  return ms >= 60_000 && ms <= 7 * 24 * 3_600_000 ? ms : null
 }
 
 export class ConfigError extends Error {
@@ -170,6 +189,14 @@ export function loadConfig(env: Env = process.env): Config {
   if (production && !rateLimitEnabled)
     problems.push('AUTH_RATE_LIMIT_ENABLED: cannot be disabled in production')
 
+  const demoEnabled = parseBool(get('DEMO_ENABLED'), !production, 'DEMO_ENABLED', problems)
+  const demoTtlMs = parseDemoTtl(get('DEMO_TTL') || '24h')
+  if (demoTtlMs === null) problems.push('DEMO_TTL: must be a duration from 1m to 168h, such as 24h')
+  const startsPerHour = Number(get('DEMO_STARTS_PER_HOUR') || '10')
+  if (!Number.isInteger(startsPerHour) || startsPerHour < 1 || startsPerHour > 1000) {
+    problems.push('DEMO_STARTS_PER_HOUR: must be a whole number from 1 to 1000')
+  }
+
   if (problems.length > 0) throw new ConfigError(problems)
 
   return {
@@ -185,6 +212,7 @@ export function loadConfig(env: Env = process.env): Config {
     mailFrom,
     ...(smtp ? { smtp } : {}),
     rateLimitEnabled,
+    demo: { enabled: demoEnabled, ttlMs: demoTtlMs ?? 0, startsPerHour },
   }
 }
 

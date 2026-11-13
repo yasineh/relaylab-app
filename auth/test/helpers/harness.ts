@@ -28,6 +28,7 @@ export function testConfig(db: TestDatabase, overrides: Partial<Config> = {}): C
     requireEmailVerification: true,
     mailFrom: 'RelayLab <no-reply@relaylab.test>',
     rateLimitEnabled: false,
+    demo: { enabled: true, ttlMs: 24 * 3_600_000, startsPerHour: 10 },
     ...overrides,
   }
 }

@@ -20,6 +20,9 @@ regexes = [
   '''^harbor-lantern-42-quartz$''',
   # The e2e suite's made-up sign-up passphrase (e2e/fixtures/env.ts).
   '''^e2e-copper-kettle-73-north$''',
+  # A made-up Authorization value the production smoke test sends, then checks
+  # never reaches any log (scripts/prod-smoke.sh).
+  '''^smoke-secret-auth-value$''',
   '''^OSsmUnAfkn3ueRXSDK8HJVOqRyNbSGO7$''',
   # Base64 placeholders in .env.example that decode to readable "dev-only-..." strings.
   '''^ZGV2LW9ubHkt[A-Za-z0-9+/=]*$''',

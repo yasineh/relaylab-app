@@ -17,6 +17,7 @@ import { ProjectLayout } from '@/features/projects/ProjectLayout'
 import { ProjectListPage } from '@/features/projects/ProjectListPage'
 import { ProjectOverviewPage } from '@/features/projects/ProjectOverviewPage'
 import { ProjectSettingsPage } from '@/features/projects/ProjectSettingsPage'
+import { ReplayHistoryPage } from '@/features/replay/ReplayHistoryPage'
 import { HomePage } from '@/pages/HomePage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
@@ -47,6 +48,7 @@ export const routes: RouteObject[] = [
               { path: 'endpoints/:endpointId', element: <EndpointDetailPage /> },
               { path: 'events', element: <EventListPage /> },
               { path: 'events/:eventId', element: <EventDetailPage /> },
+              { path: 'replays', element: <ReplayHistoryPage /> },
               { path: 'settings', element: <ProjectSettingsPage /> },
             ],
           },

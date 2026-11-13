@@ -9,8 +9,7 @@ import { cn } from '@/lib/utils'
 
 /**
  * Loads the project for /projects/:projectId/* and renders its sub-navigation.
- * Only sections that exist are listed: Replays is added by the change that
- * ships it.
+ * Only sections that exist are listed.
  */
 export function ProjectLayout() {
   const { projectId = '' } = useParams()
@@ -63,6 +62,9 @@ export function ProjectLayout() {
         </NavLink>
         <NavLink to={`/projects/${p.id}/events`} className={tab}>
           Events
+        </NavLink>
+        <NavLink to={`/projects/${p.id}/replays`} className={tab}>
+          Replays
         </NavLink>
         <NavLink to={`/projects/${p.id}/settings`} className={tab}>
           Settings

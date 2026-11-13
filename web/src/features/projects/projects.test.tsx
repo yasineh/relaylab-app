@@ -24,7 +24,7 @@ function deferred(reply: MockReply) {
 }
 
 describe('navigation (4.1)', () => {
-  it('shows only shipped sections: Projects in the app, Overview, Endpoints, Events and Settings in a project', async () => {
+  it('shows only shipped sections: Projects in the app, Overview, Endpoints, Events, Replays and Settings in a project', async () => {
     mockApi({ ...signedIn, [`GET /api/v1/projects/${ID}`]: { body: project() } })
     renderApp(`/projects/${ID}`)
     const main = await screen.findByRole('navigation', { name: 'Main' })
@@ -39,10 +39,7 @@ describe('navigation (4.1)', () => {
       within(sub)
         .getAllByRole('link')
         .map((l) => l.textContent),
-    ).toEqual(['Overview', 'Endpoints', 'Events', 'Settings'])
-    for (const missing of [/replays/i]) {
-      expect(within(sub).queryByRole('link', { name: missing })).not.toBeInTheDocument()
-    }
+    ).toEqual(['Overview', 'Endpoints', 'Events', 'Replays', 'Settings'])
     expect(within(sub).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
   })
 })

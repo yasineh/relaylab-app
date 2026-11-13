@@ -18,6 +18,8 @@ paths = [
 regexes = [
   '''^violet-anchor-89-orbit$''',
   '''^harbor-lantern-42-quartz$''',
+  # The e2e suite's made-up sign-up passphrase (e2e/fixtures/env.ts).
+  '''^e2e-copper-kettle-73-north$''',
   '''^OSsmUnAfkn3ueRXSDK8HJVOqRyNbSGO7$''',
   # Base64 placeholders in .env.example that decode to readable "dev-only-..." strings.
   '''^ZGV2LW9ubHkt[A-Za-z0-9+/=]*$''',

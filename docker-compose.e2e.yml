@@ -1,0 +1,183 @@
+# RelayLab end-to-end test stack (add-e2e-test-suite). Standalone: it does not
+# share containers, volumes, or ports with the development stack.
+#
+#   pnpm --filter @relaylab/e2e stack:up     # build and start, wait until healthy
+#   pnpm --filter @relaylab/e2e e2e          # run the Playwright suite
+#   pnpm --filter @relaylab/e2e stack:down   # stop and delete everything
+#
+# Production-like: the api serves the built web app from the same image the
+# deployment uses. Every value below is a non-secret, test-only placeholder.
+# Limits are lowered so the negative cases trigger quickly. This is never a
+# production configuration (APP_ENV=test; REPLAY_TEST_ALLOWLIST is refused in
+# production).
+#
+# Networks: `internal` has no route to the internet. Only the api, the
+# ingest-only api, Mailpit, and Postgres also join `edge`, solely so their
+# ports can be published to 127.0.0.1 for the test runner. The worker, which
+# sends replays, and the auth service are on `internal` only, so the suite
+# runs without outbound internet access.
+
+name: relaylab-e2e
+
+x-app-env: &app-env
+  APP_ENV: test
+  APP_ORIGIN: http://localhost:${E2E_API_PORT:-4180}
+  LOG_LEVEL: info
+  DATABASE_URL: postgres://app_runtime:e2e-only-app-runtime@postgres:5432/relaylab?sslmode=disable
+  REPLAY_ENABLED: "true"
+  REPLAY_OVERRIDE_ENC_KEY: ZGV2LW9ubHktcmVwbGF5LW92ZXJyaWRlLWtleS0wMDM=
+  # The controlled replay destination (e2e/echo). Test-only escape hatch.
+  REPLAY_TEST_ALLOWLIST: echo:8080
+  INGEST_BASE_URL: http://localhost:${E2E_API_PORT:-4180}
+  # Small, fast limits so the negative cases trigger deterministically.
+  LIMIT_INGEST_MAX_BODY_BYTES: "65536"
+  LIMIT_INGEST_RATE_PER_ENDPOINT_PER_MINUTE: "6"
+  LIMIT_INGEST_RATE_ENDPOINT_BURST: "10"
+  # The whole suite sends from one client address: keep the per-IP bucket out of the way.
+  LIMIT_INGEST_RATE_PER_IP_PER_MINUTE: "60000"
+  LIMIT_INGEST_RATE_IP_BURST: "5000"
+  STREAM_REVALIDATE_INTERVAL: 2s
+  OUTBOUND_CONNECT_TIMEOUT: 2s
+  OUTBOUND_TOTAL_TIMEOUT: 5s
+  OUTBOUND_HEADER_TIMEOUT: 3s
+
+x-auth-env: &auth-env
+  BETTER_AUTH_SECRET: e2e-only-better-auth-secret-not-for-production-0001
+  AUTH_PROXY_SHARED_SECRET: e2e-only-auth-proxy-secret-not-for-production-0002
+  AUTH_SIGNUP_ENABLED: ${E2E_SIGNUP_ENABLED:-true}
+  AUTH_REQUIRE_EMAIL_VERIFICATION: "true"
+
+x-api: &api
+  build: .
+  image: relaylab:e2e
+  command: ["/usr/local/bin/api"]
+  environment: &api-env
+    <<: [*app-env, *auth-env]
+    HTTP_ADDR: ":8080"
+    AUTH_SERVICE_URL: http://auth:3001
+    ENDPOINT_TOKEN_HMAC_KEY: ZGV2LW9ubHktZW5kcG9pbnQtaG1hYy1rZXktMDAwMDE=
+    ENDPOINT_TOKEN_ENC_KEY: ZGV2LW9ubHktZW5kcG9pbnQtZW5jLWtleS0wMDAwMDI=
+  networks: [internal, edge]
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    auth:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: e2e-only-postgres
+      POSTGRES_DB: relaylab
+      APP_MIGRATOR_PASSWORD: e2e-only-app-migrator
+      APP_RUNTIME_PASSWORD: e2e-only-app-runtime
+      AUTH_MIGRATOR_PASSWORD: e2e-only-auth-migrator
+      AUTH_RUNTIME_PASSWORD: e2e-only-auth-runtime
+    # Published for the suite's database helper (expiring a session).
+    ports:
+      - "127.0.0.1:${E2E_POSTGRES_PORT:-4132}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./deploy/local/initdb:/docker-entrypoint-initdb.d:ro
+      - ./deploy/sql:/deploy-sql:ro
+    networks: [internal, edge]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d relaylab"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    # The suite reads verification emails through Mailpit's HTTP API.
+    ports:
+      - "127.0.0.1:${E2E_MAILPIT_PORT:-4125}:8025"
+    networks: [internal, edge]
+
+  auth-migrate:
+    build:
+      context: .
+      dockerfile: auth/Dockerfile
+    image: relaylab-auth:e2e
+    command: ["node", "src/cli/migrate.ts"]
+    environment:
+      AUTH_MIGRATION_DATABASE_URL: postgres://auth_migrator:e2e-only-auth-migrator@postgres:5432/relaylab?sslmode=disable
+    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate:
+    build: .
+    image: relaylab:e2e
+    command: ["/usr/local/bin/api", "migrate"]
+    environment:
+      APP_ENV: test
+      MIGRATION_DATABASE_URL: postgres://app_migrator:e2e-only-app-migrator@postgres:5432/relaylab?sslmode=disable
+    networks: [internal]
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+
+  auth:
+    image: relaylab-auth:e2e
+    environment:
+      <<: *auth-env
+      APP_ENV: test
+      APP_ORIGIN: http://localhost:${E2E_API_PORT:-4180}
+      LOG_LEVEL: info
+      AUTH_PORT: "3001"
+      AUTH_DATABASE_URL: postgres://auth_runtime:e2e-only-auth-runtime@postgres:5432/relaylab?sslmode=disable
+      # Every test signs up from the same address; Better Auth's per-IP
+      # limits (5 sign-ups an hour) would stop the suite. Covered by the
+      # auth service's own tests instead.
+      AUTH_RATE_LIMIT_ENABLED: "false"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: RelayLab E2E <no-reply@relaylab.test>
+    networks: [internal]
+    depends_on:
+      auth-migrate:
+        condition: service_completed_successfully
+      mailpit:
+        condition: service_started
+
+  # The api the browser uses.
+  api:
+    <<: *api
+    ports:
+      - "127.0.0.1:${E2E_API_PORT:-4180}:8080"
+
+  # A second api instance on the same database, used only to send webhooks
+  # while the main api is restarted (live-stream recovery test).
+  api-ingest:
+    <<: *api
+    ports:
+      - "127.0.0.1:${E2E_INGEST_PORT:-4181}:8080"
+
+  worker:
+    image: relaylab:e2e
+    command: ["/usr/local/bin/worker"]
+    environment:
+      <<: *app-env
+      WORKER_HEALTH_ADDR: ":8081"
+      # Purge rarely: tests create data, they never wait for retention.
+      RETENTION_INTERVAL: 24h
+    networks: [internal]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Controlled replay destination (test-only, internal network only).
+  echo:
+    build: ./e2e/echo
+    image: relaylab-echo:e2e
+    networks: [internal]
+
+networks:
+  internal:
+    internal: true
+  edge: {}

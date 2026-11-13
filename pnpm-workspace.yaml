@@ -2,3 +2,4 @@ packages:
   - web
   - backend
   - auth
+  - e2e

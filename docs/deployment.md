@@ -74,6 +74,7 @@ environment's variables.
 | `REPLAY_ENABLED` | `false` | Replay to URLs; test-sink replay always works |
 | `DEMO_ENABLED` | `true` | Offer "Try the demo" |
 | `RETENTION_EVENT_TTL` | `24h` | Event retention (24 h for the public demo) |
+| `DEMO_VIDEO_URL`, `PUBLIC_REPO_URL` | empty | Optional landing-page links (demo video; public repository, which also gives the documentation link). Each is shown only when set |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `MAIL_FROM` | | Outgoing mail (verification and password-reset emails) |
 
 The production profile (`APP_ENV=production`, set in the manifests) makes

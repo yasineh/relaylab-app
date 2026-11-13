@@ -17,7 +17,7 @@ const OUT = new URL('../../web/src/assets/screenshots/', import.meta.url).pathna
 const browser = await chromium.launch()
 const context = await browser.newContext({
   baseURL: BASE_URL,
-  viewport: { width: 1100, height: 800 },
+  viewport: { width: 760, height: 900 },
   deviceScaleFactor: 2,
   colorScheme: 'light',
   reducedMotion: 'reduce',
@@ -72,5 +72,17 @@ await response.waitFor()
 await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
 await shot('replay', page.getByRole('dialog', { name: 'Replay details' }))
 
+// Open Graph image: the real landing page, signed out, at 1200x630.
+const visitor = await browser.newContext({
+  baseURL: BASE_URL,
+  viewport: { width: 1200, height: 630 },
+  colorScheme: 'light',
+})
+const landing = await visitor.newPage()
+await landing.goto('/')
+await landing.getByRole('heading', { level: 1 }).waitFor()
+await landing.getByRole('figure').waitFor()
+await landing.screenshot({ path: new URL('../../web/public/og-image.png', import.meta.url).pathname })
+
 await browser.close()
-console.warn(`screenshots written to ${OUT}`)
+process.stdout.write(`screenshots written to ${OUT}\n`)

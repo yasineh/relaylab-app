@@ -94,10 +94,23 @@ hosts, the database, or metadata hosts. See
 | `negatives.spec.ts` | Malformed JSON shown raw with a parse notice; another user's project, events, endpoints, and replays show "Project not found" and no data; signed-out redirect; tampered and expired sessions (UI redirect and `401`); `413` for an oversized body; `429` with `Retry-After` beyond the endpoint rate limit; metadata, loopback, private, and plain-HTTP replay destinations refused in the dialog and by the API, with no replay created and no outbound attempt in the worker log |
 | `privacy.spec.ts` | `Authorization`, `Cookie`, and `X-Api-Key` values never appear in any tab, the copied headers, the curl command, or the raw request; their names show "Removed at receipt" |
 | `offline.spec.ts` | The worker has no internet route |
+| `landing.spec.ts` | The landing page at 320, 375, 768, 1280, and 1920 px: no horizontal overflow, "Try the demo" visible, full-page screenshots attached to the report; the HTML's title, description, and Open Graph tags; keyboard order starting with the skip link, with visible focus |
 | `stack.disruptive.ts` | Stops the api mid-stream and checks that webhooks received meanwhile appear after reconnecting, without a reload. Restarts auth and the api with `AUTH_SIGNUP_ENABLED=false` and checks that sign-up is refused in the UI and the API and no account is created, then turns sign-up back on |
 
 The `disruptive` Playwright project depends on the `chromium` project, so it
 runs only after every other test, one test at a time.
+
+### Landing page screenshots
+
+The landing page's product screenshots and its Open Graph image are real
+RelayLab screens of a demo workspace (synthetic data). Regenerate them after
+UI changes, with the e2e stack running:
+
+```sh
+pnpm --filter @relaylab/e2e screenshots
+```
+
+It writes `web/src/assets/screenshots/*.jpg` and `web/public/og-image.png`.
 
 ### Rules for new tests
 

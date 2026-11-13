@@ -160,6 +160,13 @@ Replay, read by the API and the worker ([details](security/outbound-replay.md#re
 | `REPLAY_MAX_TRIES`, `REPLAY_LEASE_SECONDS`, `REPLAY_MAX_LEASE_LOSSES` | 3, 60, 3 | Deliveries per replay, worker lease, lease expiries before a job is abandoned (`worker_lost`) |
 | `REPLAY_RESPONSE_EXCERPT_BYTES`, `REPLAY_HISTORY_PAGE_DEFAULT` | 65536, 25 | Stored response body (at most 262144); replay history and activity page size |
 
+Landing page links, read by the API (reported in `GET /api/v1/config`):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DEMO_VIDEO_URL` | empty | An https link to the product demo video; the landing page shows "Watch the demo" only when set |
+| `PUBLIC_REPO_URL` | empty | The public repository (https). The footer shows "Source code" and "Documentation" (`<repo>/tree/main/docs`) only when set; keep it empty while the repository is private |
+
 Demo workspaces, read by the API, the worker, and the auth service ([details](security/authentication.md#demo-users)):
 
 | Variable | Default | Notes |

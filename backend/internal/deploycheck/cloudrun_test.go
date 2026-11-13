@@ -25,6 +25,8 @@ var placeholders = map[string]string{
 	"REPLAY_ENABLED":          "false",
 	"DEMO_ENABLED":            "true",
 	"RETENTION_EVENT_TTL":     "24h",
+	"DEMO_VIDEO_URL":          "",
+	"PUBLIC_REPO_URL":         "",
 	"SMTP_HOST":               "smtp.example.com",
 	"SMTP_PORT":               "587",
 	"SMTP_USER":               "relaylab",

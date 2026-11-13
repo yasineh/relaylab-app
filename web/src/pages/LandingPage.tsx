@@ -106,7 +106,7 @@ function RequestPanel() {
         <span className="text-slate-300">Received by Demo endpoint</span>
         <span className="text-slate-400">71 bytes</span>
       </figcaption>
-      <pre className="overflow-x-auto px-5 py-4 font-mono text-[13px] leading-6 whitespace-pre-wrap break-all">
+      <pre className="overflow-x-auto px-5 py-4 font-mono text-[13px] leading-6 whitespace-pre-wrap [overflow-wrap:anywhere]">
         <code>
           <span className="font-semibold text-sky-300">POST</span> /orders?store=demo&amp;token=
           <span className="rounded bg-slate-700 px-1 text-amber-200">[REDACTED]</span>
@@ -170,9 +170,9 @@ function HowItWorks() {
         {STEPS.map((s, i) => (
           <li
             key={s.title}
-            className="grid items-center gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-10"
+            className="grid items-start gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] md:gap-10"
           >
-            <div className="space-y-2">
+            <div className="space-y-2 md:pt-4">
               <p aria-hidden="true" className="font-mono text-sm text-primary">
                 Step {i + 1}
               </p>

@@ -80,6 +80,7 @@ Public settings the web app needs before sign-in. No authentication. Contains no
 | `retention.event_ttl_seconds` | How long events are kept (`RETENTION_EVENT_TTL`). `0` means events are not deleted by age, which only development allows |
 | `retention.max_events_per_project` | Events kept per project before the oldest are deleted (`RETENTION_MAX_EVENTS_PER_PROJECT`) |
 | `demo_enabled` | Whether visitors can start a demo workspace (`DEMO_ENABLED`) |
+| `demo_video_url`, `repo_url` | Optional landing-page links (`DEMO_VIDEO_URL`, `PUBLIC_REPO_URL`); absent when not set |
 
 ### `GET /api/v1/me`
 

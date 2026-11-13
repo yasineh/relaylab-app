@@ -57,6 +57,10 @@ spec:
               value: "${DEMO_ENABLED}"
             - name: RETENTION_EVENT_TTL
               value: "${RETENTION_EVENT_TTL}"
+            - name: DEMO_VIDEO_URL
+              value: "${DEMO_VIDEO_URL}"
+            - name: PUBLIC_REPO_URL
+              value: "${PUBLIC_REPO_URL}"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

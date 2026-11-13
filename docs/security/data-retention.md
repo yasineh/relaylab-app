@@ -76,9 +76,15 @@ the worker's `/metrics`: `retention_deleted_total{table}` and
 rate-limit window (one hour), every 10 minutes. Rows still inside a window are
 kept, because they are what enforces the limit.
 
+**Demo workspaces.** The auth service deletes demo users older than
+`DEMO_TTL` (24 hours by default) every 10 minutes, and with them, by
+cascade, everything they own: projects, endpoints, events, replays, jobs,
+audit entries, and sessions. Their sessions stop working at expiry, before
+the purge runs. Demo projects also keep at most `DEMO_MAX_EVENTS` (200)
+events: the retention purge deletes the oldest beyond that on each run.
+
 **Not handled here.** The Go worker has no write access to the `auth` schema.
-Better Auth deletes expired sessions itself. Demo workspace expiry belongs to
-`add-production-readiness`.
+Better Auth deletes expired sessions itself.
 
 ## Deleting data yourself
 

@@ -11,7 +11,7 @@ The `auth` schema holds Better Auth's tables (users, sessions, credentials).
 The `app` schema holds `projects` (owned by `auth."user"` across schemas),
 their webhook `endpoints`, the received `webhook_events`, the shared
 `audit_log`, the `replay_attempts` of events, the background `jobs` queue,
-and `worker_heartbeats`.
+`worker_heartbeats`, and `demo_workspaces`.
 
 ```mermaid
 erDiagram
@@ -28,6 +28,7 @@ erDiagram
   app_endpoints |o--o{ app_replay_attempts : "sink (set null)"
   auth_user |o--o{ app_replay_attempts : "actor (set null)"
   app_projects |o--o{ app_jobs : "queues (cascade)"
+  auth_user ||--o| app_demo_workspaces : "demo workspace (cascade)"
   app_replay_attempts {
     uuid id PK "UUIDv7"
     uuid project_id FK
@@ -380,6 +381,19 @@ seconds.
 | `version` | text, not null | Worker build revision |
 | `seen_at` | timestamptz, not null | Last heartbeat; rows older than a day are deleted by workers |
 
+### `app.demo_workspaces`
+
+One row per demo user (a Better Auth anonymous user) whose workspace has
+been seeded. The API inserts it in the same transaction as the seeded
+project, endpoints, and events, so a row means "seeded exactly once".
+Created by `backend/migrations/00007_demo_workspaces.sql`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `user_id` | text | Primary key; FK → `auth."user"(id)` **`ON DELETE CASCADE`** |
+| `created_at` | timestamptz, not null | Default `now()` |
+| `expires_at` | timestamptz, not null | `created_at` + `DEMO_TTL` (24 h by default); `CHECK` later than `created_at` |
+
 ### `auth` tables (created by Better Auth)
 
 Column names are camelCase and must be quoted in SQL (`"userId"`). The Go API
@@ -389,7 +403,7 @@ declares those two tables for sqlc only.
 
 | Table | Purpose | Key columns and constraints | Indexes |
 |---|---|---|---|
-| `auth."user"` | Accounts | `id text` PK (random string); `email text` UNIQUE, stored lowercase; `name text`; `"emailVerified" boolean`; `image text` (unused) | `user_pkey`, `user_email_key` |
+| `auth."user"` | Accounts | `id text` PK (random string); `email text` UNIQUE, stored lowercase; `name text`; `"emailVerified" boolean`; `image text` (unused); `"isAnonymous" boolean` (added by the anonymous plugin: true only for demo users) | `user_pkey`, `user_email_key` |
 | `auth."session"` | Active sessions | `id text` PK; `token text` UNIQUE (the cookie's token); `"expiresAt" timestamptz`; `"userId" text` FK → `user.id` `ON DELETE CASCADE`; `"ipAddress"`, `"userAgent"` always `NULL` (privacy hook) | `session_pkey`, `session_token_key`, `session_userId_idx` |
 | `auth.account` | Credentials per provider. Email and password only: `providerId = 'credential'`, `password` is a scrypt hash | `"userId"` FK → `user.id` `ON DELETE CASCADE`; OAuth token columns unused | `account_pkey`, `account_userId_idx` |
 | `auth.verification` | Single-use email-verification and password-reset tokens | `identifier`, `value`, `"expiresAt"` (verification: 24 h; reset: 1 h) | `verification_pkey`, `verification_identifier_idx` |
@@ -428,6 +442,7 @@ or restore.
 - **Worker heartbeats**: one row per worker; rows not updated for a day are deleted by running workers.
 - **Audit log**: purged after `RETENTION_AUDIT_TTL` (default 90 days), and deleted with its project. If the actor's account is deleted, `actor_user_id` becomes `NULL` (in practice the actor's projects, and so these rows, are deleted too).
 
+- **Demo users**: deleted by the auth service once older than `DEMO_TTL` (24 h by default); every app row they own (projects, endpoints, events, replays, jobs, audit entries, the `demo_workspaces` row) and their sessions go by cascade. Their sessions are refused as soon as the demo expires. Demo projects are capped at `DEMO_MAX_EVENTS` (200) stored events by the retention purge.
 - **Accounts**: kept until the user deletes their account (Account settings → Delete account), which removes the `user` row and, by cascade, its sessions, credentials, and projects (with their endpoints, events, and audit entries).
 - **Sessions**: deleted on sign-out, sign-out everywhere, password change (other sessions), password reset (all sessions), and account deletion. Expired rows are rejected immediately but remain in the table until Better Auth removes them.
 - **Verification and reset tokens**: single use; they expire after 24 hours and 1 hour respectively.

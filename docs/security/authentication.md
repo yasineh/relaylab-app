@@ -124,6 +124,23 @@ Rate-limit rows (`auth."rateLimit"`) are the only place an IP address is
 stored. They are keyed `<ip>|<path>` and hold a counter and a timestamp.
 Pruning old rows (by the auth service, which owns the schema) is planned in `add-event-retention`.
 
+## Demo users
+
+When `DEMO_ENABLED` is on (the default outside production), "Try the demo"
+calls Better Auth's anonymous sign-in (`POST /api/auth/sign-in/anonymous`).
+It creates a user with `"isAnonymous" = true`, the name "Demo visitor", and
+an address under the reserved `demo.relaylab.invalid` domain, and starts an
+ordinary session cookie. A client IP may start `DEMO_STARTS_PER_HOUR` (10)
+demos an hour; further attempts get `429`. With demos off, the endpoint does
+not exist (`404`).
+
+The Go API reads `isAnonymous` and the user's creation time with the
+session. Demo users skip the email-verification check (they have no
+address), get a seeded workspace and lower limits, and replay to their test
+sink only. Their sessions are refused once `DEMO_TTL` (24 h) has passed since
+the user was created, and the auth service deletes expired demo users every
+10 minutes; their app data goes by cascade.
+
 ## Database ownership and migrations
 
 | Schema | Owner | Migrations | Runtime role |

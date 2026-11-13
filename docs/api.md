@@ -35,10 +35,11 @@ SQL, file paths, or configuration values.
 | 404 | `not_found` | Unknown path (on `/api/v1`, only after authentication succeeds), or a resource that is missing, owned by someone else, or has a malformed id. These cases are indistinguishable |
 | 405 | `method_not_allowed` | Known path, wrong method |
 | 413 | `body_too_large` | Body over the limit |
-| 409 | `project_limit_reached` | Creating a project beyond `LIMIT_PROJECTS_PER_USER` |
-| 409 | `endpoint_limit_reached` | Creating an endpoint beyond `LIMIT_ENDPOINTS_PER_PROJECT` |
+| 409 | `project_limit_reached` | Creating a project beyond `LIMIT_PROJECTS_PER_USER` (`DEMO_MAX_PROJECTS` for demo users) |
+| 409 | `endpoint_limit_reached` | Creating an endpoint beyond `LIMIT_ENDPOINTS_PER_PROJECT` (`DEMO_MAX_ENDPOINTS` for demo users) |
+| 403 | `demo_restricted` | A demo user asked for a replay to a URL; demo workspaces replay to their test sink only |
 | 415 | `unsupported_media_type` | Body is not `application/json` |
-| 429 | `too_many_streams` | Opening a live event stream beyond `LIMIT_STREAMS_PER_USER` |
+| 429 | `too_many_streams` | Opening a live event stream beyond `LIMIT_STREAMS_PER_USER` (`DEMO_MAX_STREAMS` for demo users) |
 | 409 | `idempotency_conflict` | An `Idempotency-Key` reused for a different replay request |
 | 422 | `invalid_destination` | A replay destination that is not allowed (`error.fields` says why) |
 | 429 | `replay_queue_full` | The project already has `REPLAY_PROJECT_QUEUE_DEPTH` replays waiting or running |
@@ -66,7 +67,8 @@ Public settings the web app needs before sign-in. No authentication. Contains no
   "email_verification_required": true,
   "replay_enabled": true,
   "replay_url_available": true,
-  "retention": { "event_ttl_seconds": 604800, "max_events_per_project": 10000 }
+  "retention": { "event_ttl_seconds": 604800, "max_events_per_project": 10000 },
+  "demo_enabled": false
 }
 ```
 
@@ -77,6 +79,7 @@ Public settings the web app needs before sign-in. No authentication. Contains no
 | `replay_enabled`, `replay_url_available` | Replay availability; see [Replays](#replays) |
 | `retention.event_ttl_seconds` | How long events are kept (`RETENTION_EVENT_TTL`). `0` means events are not deleted by age, which only development allows |
 | `retention.max_events_per_project` | Events kept per project before the oldest are deleted (`RETENTION_MAX_EVENTS_PER_PROJECT`) |
+| `demo_enabled` | Whether visitors can start a demo workspace (`DEMO_ENABLED`) |
 
 ### `GET /api/v1/me`
 
@@ -84,10 +87,22 @@ The signed-in user, taken only from the validated session. Responses are
 `Cache-Control: no-store`.
 
 ```json
-{ "id": "Ki5Aykfh3hz7EGvU4FRKQnYeFhx1mbAg", "email": "ada@example.com", "name": "Ada Lovelace", "email_verified": true }
+{ "id": "Ki5Aykfh3hz7EGvU4FRKQnYeFhx1mbAg", "email": "ada@example.com", "name": "Ada Lovelace", "email_verified": true, "is_demo": false }
 ```
 
+For a demo user, `is_demo` is `true` and `demo_expires_at` (RFC 3339) says
+when the demo workspace and its data are deleted. A demo session gets
+`401 session_expired` from that moment on.
+
 Errors: `401 unauthenticated`, `401 session_expired`, `403 email_not_verified`.
+
+**Demo workspaces.** A demo user (a Better Auth anonymous user, created by
+`POST /api/auth/sign-in/anonymous` when `DEMO_ENABLED` is on; at most
+`DEMO_STARTS_PER_HOUR` per client IP, then `429`) gets a seeded workspace on
+their first `/api/v1` request: the project "Demo project" with the endpoints
+"Demo endpoint" and "Test sink" and synthetic events. Demo users have lower
+limits (1 project, 2 endpoints, 200 stored events, 2 live streams, 10
+webhooks a minute per endpoint) and replay to their test sink only.
 
 ### Projects
 

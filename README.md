@@ -36,6 +36,7 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 - [Development guide](docs/development.md)
 - [Testing](docs/development/testing.md) (unit, integration, and end-to-end)
 - [Continuous integration](docs/ci.md)
+- [Deployment](docs/deployment.md) (prepared; not deployed yet)
 - [Architecture overview](docs/architecture/overview.md) (current implementation)
 - [Database schema](docs/architecture/erd.md)
 - [Brand and design system](docs/design/design-system.md)

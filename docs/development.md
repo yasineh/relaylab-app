@@ -106,6 +106,7 @@ If a port is taken on your machine, change it in `.env`:
 | `pnpm build` | Production web build and an API binary that embeds it (`backend/bin/`) |
 | `pnpm check` | Format check, lint, typecheck, tests and build: run before pushing |
 | `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
+| `pnpm deploy:check` | Validate the Cloud Run manifests offline and lint every workflow ([Deployment](deployment.md)) |
 | `pnpm secrets:scan` | gitleaks over the working tree |
 
 Package-level scripts also work, for example
@@ -125,7 +126,8 @@ deployment environment, never a file.
 | `APP_ORIGIN` | `http://localhost:5173` | Browser origin of the app. Required and HTTPS-only in production |
 | `HTTP_ADDR` | `:8080` | API listen address |
 | `WORKER_HEALTH_ADDR` | `:8081` | Worker health listen address |
-| `DATABASE_URL` | — (required) | Runtime connection as `app_runtime` |
+| `DATABASE_URL` | — (required) | Runtime connection as `app_runtime`. May go through a transaction-mode pooler. In production it must require TLS (`sslmode=require` or stricter) |
+| `DATABASE_DIRECT_URL` | `DATABASE_URL` | Direct connection for `LISTEN` and the retention lock; set it when `DATABASE_URL` is pooled |
 | `MIGRATION_DATABASE_URL` | — | Migrator connection as `app_migrator`; read only by `migrate` |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `TRUSTED_PROXY_CIDRS` | empty | CIDRs whose `X-Forwarded-For` is trusted. Empty trusts none |
@@ -141,6 +143,7 @@ Authentication and mail ([details](security/authentication.md)):
 | `AUTH_SERVICE_URL` | `http://localhost:3001` | Where the API proxies `/api/auth/*`. Required in production |
 | `AUTH_SIGNUP_ENABLED` | `true`; `false` in production | Public sign-up |
 | `AUTH_REQUIRE_EMAIL_VERIFICATION` | `true` | Users must verify their email before signing in |
+| `AUTH_ALLOW_PUBLIC_SIGNUP_ACK` | `false` | In production, sign-up also needs this set to `true` (and email verification on); a deliberate decision |
 | `AUTH_DATABASE_URL` | — (required by auth) | Auth service connection as `auth_runtime` |
 | `AUTH_MIGRATION_DATABASE_URL` | — | Auth migrations as `auth_migrator` |
 | `AUTH_PORT` | `3001` | Auth service listen port |
@@ -156,6 +159,16 @@ Replay, read by the API and the worker ([details](security/outbound-replay.md#re
 | `REPLAY_PROJECT_CONCURRENCY`, `REPLAY_PROJECT_QUEUE_DEPTH`, `REPLAY_USER_RATE_PER_MINUTE` | 2, 20, 30 | Running per project, waiting or running per project (`429 replay_queue_full`), creations per user per minute (`429 rate_limited`) |
 | `REPLAY_MAX_TRIES`, `REPLAY_LEASE_SECONDS`, `REPLAY_MAX_LEASE_LOSSES` | 3, 60, 3 | Deliveries per replay, worker lease, lease expiries before a job is abandoned (`worker_lost`) |
 | `REPLAY_RESPONSE_EXCERPT_BYTES`, `REPLAY_HISTORY_PAGE_DEFAULT` | 65536, 25 | Stored response body (at most 262144); replay history and activity page size |
+
+Demo workspaces, read by the API, the worker, and the auth service ([details](security/authentication.md#demo-users)):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DEMO_ENABLED` | `true`; `false` in production | Offer "Try the demo" (Better Auth anonymous users). Set it the same for the API and the auth service |
+| `DEMO_TTL` | `24h` | A demo workspace and its user are deleted this long after creation (1m to 168h, whole minutes) |
+| `DEMO_STARTS_PER_HOUR` | 10 | Demos one client IP may start per hour (auth service) |
+| `DEMO_MAX_PROJECTS`, `DEMO_MAX_ENDPOINTS`, `DEMO_MAX_EVENTS`, `DEMO_MAX_STREAMS` | 1, 2, 200, 2 | Demo users' limits |
+| `DEMO_INGEST_RATE_PER_MINUTE`, `DEMO_INGEST_BURST` | 10, 5 | Webhooks a demo endpoint accepts |
 
 Data retention, read by the worker (purge) and the API (reported in `GET /api/v1/config`) ([details](security/data-retention.md)):
 

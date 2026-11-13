@@ -98,12 +98,20 @@ fall back to the web app when it is embedded.
   events through the ingestion insert path. Credential and signature headers
   are never forwarded; values users add are encrypted until delivery.
   Details: [Outbound requests](../security/outbound-replay.md).
+- **Demo workspaces**: "Try the demo" signs in as a Better Auth anonymous
+  user (`DEMO_ENABLED`). The Go API recognises demo users from the session,
+  seeds each one a workspace on their first request, applies lower limits,
+  and allows replay to the test sink only. The auth service deletes demo
+  users after `DEMO_TTL`, and their data goes by cascade.
 - **Retention**: one worker at a time (Postgres advisory lock) deletes events
   past `RETENTION_EVENT_TTL` or beyond the per-project cap, old audit entries,
   and finished jobs, in batches of at most 1,000 rows. The worker has no write
   access to the `auth` schema; the auth service prunes its own rate-limit
   rows. Details: [Data retention and deletion](../security/data-retention.md).
 
-In production (prepared by `add-production-readiness`), the auth service runs
-as a sidecar in the same Cloud Run service as the API, so `AUTH_SERVICE_URL`
-is `http://localhost:3001` and the port is never exposed.
+In production (prepared, not deployed: see [Deployment](../deployment.md)),
+the auth service runs as a sidecar in the same Cloud Run service as the API,
+so `AUTH_SERVICE_URL` is `http://localhost:3001` and the port is never
+exposed. Request traffic may go through a transaction-mode pooler
+(`DATABASE_URL`); `LISTEN` and the retention lock use a direct connection
+(`DATABASE_DIRECT_URL`).

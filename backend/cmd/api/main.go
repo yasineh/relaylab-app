@@ -119,6 +119,12 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	siteCfg, err := config.LoadSite(os.Getenv)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
 	outCfg, err := config.LoadOutbound(os.Getenv, cfg)
 	if err != nil {
 		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
@@ -235,6 +241,7 @@ func runServer() int {
 		retention: retentionCfg,
 		demo:      demoProvisioner,
 		demoCfg:   demoCfg,
+		site:      siteCfg,
 		web:       webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)

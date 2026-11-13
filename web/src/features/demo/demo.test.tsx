@@ -22,13 +22,13 @@ describe('try the demo (4.1)', () => {
   it('is not offered when demos are off, or to signed-in users', async () => {
     mockApi({ ...signedOut, ...configWithDemo(false) })
     const first = renderApp('/')
-    expect(await screen.findByRole('heading', { name: 'RelayLab', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Try the demo' })).not.toBeInTheDocument()
     first.unmount()
 
     mockApi({ ...signedIn, ...configWithDemo(true) })
     renderApp('/')
-    expect(await screen.findByRole('heading', { name: 'RelayLab', level: 1 })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: 'Try the demo' })).not.toBeInTheDocument(),
     )

@@ -18,15 +18,17 @@ import { ProjectListPage } from '@/features/projects/ProjectListPage'
 import { ProjectOverviewPage } from '@/features/projects/ProjectOverviewPage'
 import { ProjectSettingsPage } from '@/features/projects/ProjectSettingsPage'
 import { ReplayHistoryPage } from '@/features/replay/ReplayHistoryPage'
-import { HomePage } from '@/pages/HomePage'
+import { LandingPage } from '@/pages/LandingPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
+import { SecurityPage } from '@/pages/SecurityPage'
 
 export const routes: RouteObject[] = [
   {
     path: '/',
     element: <AppShell />,
     children: [
-      { index: true, element: <HomePage /> },
+      { index: true, element: <LandingPage /> },
+      { path: 'security', element: <SecurityPage /> },
       // Public authentication screens.
       { path: 'sign-in', element: <SignInPage /> },
       { path: 'sign-up', element: <SignUpPage /> },

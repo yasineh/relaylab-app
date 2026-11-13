@@ -17,5 +17,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["tests", "fixtures", "playwright.config.ts"]
+  "include": ["tests", "fixtures", "tools", "playwright.config.ts"]
 }

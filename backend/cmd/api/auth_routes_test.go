@@ -184,7 +184,7 @@ func TestPublicConfigReportsReplayAvailability(t *testing.T) {
 	a := &config.Auth{SignupEnabled: true}
 	for _, g := range []fakeReplayGate{{true, true}, {true, false}, {false, false}} {
 		rec := httptest.NewRecorder()
-		publicConfig(a, g, nil, nil)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+		publicConfig(a, g, nil, nil, nil)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
 		var body map[string]any
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
 		if body["replay_enabled"] != g.enabled || body["replay_url_available"] != g.url {
@@ -205,10 +205,25 @@ func TestPublicConfigReportsRetention(t *testing.T) {
 		{0, 10000, `"retention":{"event_ttl_seconds":0,"max_events_per_project":10000}`},
 	} {
 		rec := httptest.NewRecorder()
-		publicConfig(a, nil, &config.Retention{EventTTL: c.ttl, MaxEventsPerProject: c.cap}, nil)(rec,
+		publicConfig(a, nil, &config.Retention{EventTTL: c.ttl, MaxEventsPerProject: c.cap}, nil, nil)(rec,
 			httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
 		if !strings.Contains(rec.Body.String(), c.want) {
 			t.Errorf("ttl %v: %s", c.ttl, rec.Body)
 		}
+	}
+}
+
+func TestPublicConfigReportsLandingLinksOnlyWhenSet(t *testing.T) {
+	a := &config.Auth{}
+	rec := httptest.NewRecorder()
+	publicConfig(a, nil, nil, nil, &config.Site{})(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+	if strings.Contains(rec.Body.String(), "demo_video_url") || strings.Contains(rec.Body.String(), "repo_url") {
+		t.Fatalf("unset links reported: %s", rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	publicConfig(a, nil, nil, nil, &config.Site{DemoVideoURL: "https://youtu.be/x", RepoURL: "https://github.com/example/relaylab"})(rec,
+		httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+	if !strings.Contains(rec.Body.String(), `"demo_video_url":"https://youtu.be/x"`) || !strings.Contains(rec.Body.String(), `"repo_url":"https://github.com/example/relaylab"`) {
+		t.Fatalf("links: %s", rec.Body)
 	}
 }

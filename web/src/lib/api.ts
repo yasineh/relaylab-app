@@ -95,6 +95,10 @@ export type PublicConfig = {
   retention?: { event_ttl_seconds: number; max_events_per_project: number }
   /** DEMO_ENABLED: offer "Try the demo". */
   demo_enabled?: boolean
+  /** DEMO_VIDEO_URL: the product demo video; absent when not configured. */
+  demo_video_url?: string
+  /** PUBLIC_REPO_URL: the public repository; absent while it is private. */
+  repo_url?: string
 }
 
 export const fetchMe = (signal?: AbortSignal) => apiFetch<Me>('/api/v1/me', { signal })

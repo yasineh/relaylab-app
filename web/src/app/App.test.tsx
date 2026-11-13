@@ -5,43 +5,17 @@ import { describe, expect, it, vi } from 'vitest'
 import { mockApi, signedOut } from '@/test/api'
 import { renderApp } from '@/test/render'
 
+const LANDING_H1 = 'Catch a webhook, read every byte, send it again.'
+
 describe('app shell', () => {
-  it('renders the RelayLab shell with a skip link and landmarks', async () => {
+  it('renders the shell with a skip link, header, main, and footer', async () => {
     mockApi(signedOut)
     renderApp('/')
-    expect(screen.getByRole('heading', { level: 1, name: 'RelayLab' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: LANDING_H1 })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Skip to content' })).toHaveAttribute('href', '#main')
     expect(screen.getByRole('banner')).toBeInTheDocument()
     expect(screen.getByRole('main')).toBeInTheDocument()
-    expect(await screen.findByText('API and database are ready.')).toBeInTheDocument()
-  })
-
-  it('shows not-ready checks from a 503 readiness response', async () => {
-    mockApi({
-      ...signedOut,
-      'GET /readyz': {
-        status: 503,
-        body: { status: 'not_ready', checks: { database: 'ok', migrations: 'fail' } },
-      },
-    })
-    renderApp('/')
-    expect(await screen.findByText('The API is not ready.')).toBeInTheDocument()
-    expect(screen.getByText(/Migrations: fail/)).toBeInTheDocument()
-  })
-
-  it('shows an error state when the API is unreachable and can refresh', async () => {
-    const { spy } = mockApi(signedOut)
-    const real = spy.getMockImplementation()!
-    spy.mockImplementation(async (input, init) => {
-      if (String(input).endsWith('/readyz')) throw new TypeError('Failed to fetch')
-      return real(input, init)
-    })
-    renderApp('/')
-    expect(await screen.findByText('The API is unreachable.')).toBeInTheDocument()
-
-    spy.mockImplementation(real)
-    await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-    expect(await screen.findByText('API and database are ready.')).toBeInTheDocument()
+    expect(screen.getByRole('contentinfo')).toBeInTheDocument()
   })
 
   it('renders a not-found page with a working link home', async () => {
@@ -49,14 +23,17 @@ describe('app shell', () => {
     renderApp('/does-not-exist')
     expect(screen.getByRole('heading', { name: 'Page not found' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Back to home' }))
-    expect(await screen.findByRole('heading', { level: 1, name: 'RelayLab' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: LANDING_H1 })).toBeInTheDocument()
   })
 
-  it('offers sign-in and sign-up when signed out', async () => {
+  it('offers sign-in and sign-up in the header when signed out', async () => {
     mockApi(signedOut)
     renderApp('/')
-    expect(await screen.findByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/sign-in')
-    expect(await screen.findByRole('link', { name: 'Create account' })).toHaveAttribute('href', '/sign-up')
+    const header = screen.getByRole('banner')
+    expect(await screen.findByRole('navigation', { name: 'Account' })).toBeInTheDocument()
+    const links = Array.from(header.querySelectorAll('a')).map((a) => [a.textContent, a.getAttribute('href')])
+    expect(links).toContainEqual(['Sign in', '/sign-in'])
+    expect(links).toContainEqual(['Create account', '/sign-up'])
   })
 })
 

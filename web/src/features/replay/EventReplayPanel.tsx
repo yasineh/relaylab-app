@@ -10,7 +10,7 @@ import { stateLabel, useEventReplays, type Replay } from '@/features/replay/api'
 import { ReplayDialog } from '@/features/replay/ReplayDialog'
 import { ReplayStateBadge } from '@/features/replay/ReplayStateBadge'
 import { configQueryKey, usePublicConfig } from '@/hooks/session'
-import { formatRelative } from '@/lib/format'
+import { formatPreciseDateTime } from '@/lib/format'
 
 /** The event detail's replay entry point and the event's recent replays. */
 export function EventReplayPanel({
@@ -25,7 +25,6 @@ export function EventReplayPanel({
   const endpoints = useEndpoints(projectId)
   const replays = useEventReplays(projectId, event.id)
   const [open, setOpen] = useState(false)
-  const [now] = useState(() => new Date())
   const enabled = config.data?.replay_enabled === true
 
   const openDialog = () => {
@@ -69,7 +68,7 @@ export function EventReplayPanel({
                 <VisibleText text={`${r.method} ${r.target}`} />
               </span>
               <time dateTime={r.created_at} className="text-xs text-muted-foreground">
-                {formatRelative(r.created_at, now)}
+                {formatPreciseDateTime(r.created_at)}
               </time>
               <Link
                 to={`/projects/${projectId}/replays?replay=${r.id}`}

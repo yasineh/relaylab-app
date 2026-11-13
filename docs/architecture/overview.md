@@ -12,7 +12,7 @@ flowchart LR
     vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
     subgraph image["relaylab image (distroless, nonroot)"]
       api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/api/v1/projects/{id}/events/stream (SSE, session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build<br/>realtime broker: one LISTEN connection per instance"]
-      worker["worker<br/>/healthz, /readyz (outbound_guard), /metrics on :8081<br/>outbound guard for replay (no jobs yet)"]
+      worker["worker<br/>/healthz, /readyz (outbound_guard), /metrics on :8081<br/>replay job runner (SKIP LOCKED leases)<br/>outbound guard + heartbeat every 15 s"]
       migrate["api migrate<br/>(one-shot, goose)"]
     end
     subgraph authimg["relaylab-auth image (Node 24)"]
@@ -32,7 +32,10 @@ flowchart LR
   browser -.->|"production layout: api serves the SPA"| api
   api -->|"/api/auth/* + shared proxy header"| auth
   api -->|"app_runtime: DML on app,<br/>SELECT auth.session, auth.user"| pg
-  worker -->|"app_runtime"| pg
+  worker -->|"app_runtime: claim jobs, record results,<br/>heartbeat, sink events"| pg
+  api -->|"create replay + job + audit (one tx),<br/>NOTIFY replay_jobs"| pg
+  dest["Replay destination<br/>(public internet only)"]
+  worker -->|"HTTPS through the outbound guard:<br/>public addresses only, no redirects"| dest
   migrate -->|"app_migrator (DDL on app)"| pg
   auth -->|"auth_runtime (DML on auth)"| pg
   authmigrate -->|"auth_migrator (DDL on auth)"| pg
@@ -84,11 +87,16 @@ fall back to the web app when it is embedded.
   carry ids only. Each stream loads summaries with an owner-scoped query, and
   summaries never include bodies, headers, or query values. Details:
   [API reference](../api.md#get-apiv1projectsprojectideventsstream).
-- **Outbound requests**: the worker holds the only client allowed to send
-  user-directed requests (`internal/replay/outbound`). HTTPS only, public
-  addresses only (checked on every DNS answer and on the socket itself), no
-  redirects, internal and RelayLab hosts blocked, and bounded time, size, and
-  concurrency. Nothing uses it yet; replay jobs arrive with `add-event-replay`.
+- **Outbound requests (replay)**: the API validates and queues replays
+  (`/api/v1/projects/{id}/events/{eventId}/replays`, owner-only, behind
+  `REPLAY_ENABLED` and a fresh worker heartbeat). The worker claims them from
+  `app.jobs` and is the only process that sends user-directed requests,
+  through `internal/replay/outbound`: HTTPS only, public addresses only
+  (checked on every DNS answer and on the socket itself), no redirects,
+  internal and RelayLab hosts blocked, and bounded time, size, and
+  concurrency. Test-sink replays never open a socket: they are stored as new
+  events through the ingestion insert path. Credential and signature headers
+  are never forwarded; values users add are encrypted until delivery.
   Details: [Outbound requests](../security/outbound-replay.md).
 
 In production (prepared by `add-production-readiness`), the auth service runs

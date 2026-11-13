@@ -8,9 +8,8 @@ internal services, or RelayLab itself.
 Every user-directed outbound request goes through one guarded client,
 `backend/internal/replay/outbound`, in the worker. An architecture test fails
 if any other package under `internal/replay` builds an HTTP client or dials.
-This page describes what `add-outbound-request-guard` implements. Replay
-itself (jobs, UI, history) ships with `add-event-replay`, and refuses to run
-unless the guard is active.
+Replay jobs, the API, and the UI ship with `add-event-replay` (see
+[Replay](#replay) below); URL replay runs only while the guard is active.
 
 ## How a request is checked
 
@@ -70,12 +69,14 @@ sent to a refused destination.
   256 KiB; longer bodies are truncated and flagged), measured after gzip
   decoding; response headers 32 KiB; `OUTBOUND_MAX_CONCURRENCY` (8) requests
   in flight per worker. Connections are never reused.
-- **Headers**: the caller's `Authorization`, `Proxy-Authorization`, `Cookie`,
+- **Headers**: headers derived from the event never include the caller's `Authorization`, `Proxy-Authorization`, `Cookie`,
   `Set-Cookie`, `Host`, `Connection`, `Keep-Alive`, `Transfer-Encoding`,
   `TE`, `Trailer`, `Upgrade`, `Proxy-*`, `Forwarded`, `X-Forwarded-*`,
   `X-Real-IP`, `Content-Length`, `Accept-Encoding`, and `User-Agent` are not
-  sent. `User-Agent` is `RelayLab-Replay/<revision>`. A header containing
-  CR, LF, or NUL, or with an invalid name, fails the request.
+  sent. Headers the user adds explicitly to one replay may set
+  `Authorization`; any other name from that list fails the request
+  (`invalid_request`). `User-Agent` is `RelayLab-Replay/<revision>`. A header
+  containing CR, LF, or NUL, or with an invalid name, fails the request.
 - **Methods**: GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS.
 
 ## Outcomes and what users see
@@ -133,6 +134,51 @@ a test that doesn't exist.
 | 21 | Test DNS rebinding | Connection destination is validated at dial time | TestDNSRebindingDefeated |
 | 22 | Test redirects | Redirects are not followed | TestRedirectsNotFollowed, TestSanitizeLocation |
 | 23 | Test metadata addresses | Non-public IPv4; Internal host names; Guard activation self-check | TestValidateURLCategories, TestSelfCheckPassesWithValidPolicy, TestSelfCheckFailsClosed |
+
+## Replay
+
+- **Off unless enabled.** `REPLAY_ENABLED` defaults to `false` in production
+  and `true` in development. When it is off, the API answers
+  `503 replay_unavailable` and creates nothing. URL replays additionally need
+  a worker heartbeat (every 15 s) reporting an active guard within 60 s; the
+  worker also refuses to send while its own guard is inactive. Sink replays
+  never leave RelayLab and need only `REPLAY_ENABLED`.
+- **Test sink.** A sink replay stores a new event on another endpoint of the
+  same project (marked `source = replay` with the replay id), through the
+  ingestion insert path without HTTP. No socket is opened, so the sink cannot be
+  used to reach anything.
+- **Headers.** Credentials, signature headers, values removed at receipt,
+  hop-by-hop and forwarding headers from the original event are never sent. A
+  replay therefore does not reproduce the original signature or authentication;
+  users add headers explicitly when a destination needs them. Override values
+  are encrypted with `REPLAY_OVERRIDE_ENC_KEY` (AES-256-GCM, bound to the
+  replay id), decrypted only by the worker for the delivery, erased when the
+  replay finishes (including failures, lost workers, and deleted rows), and
+  never logged or returned.
+- **Delivery.** A worker claims the job with a 60 s lease
+  (`REPLAY_LEASE_SECONDS`), extended before each try. At most `REPLAY_MAX_TRIES`
+  (3) tries, retrying only `connect_failure`, `dns_failure`, `timeout`, and
+  502/503/504, after 2 s and 8 s plus jitter. A job whose lease expires
+  `REPLAY_MAX_LEASE_LOSSES` (3) times is abandoned and the replay ends
+  `failed`/`worker_lost`. Delivery is **at least once**: a worker that dies
+  mid-request may have sent it, and another worker sends it again. Only the
+  current lease holder can record a result, and every delivery carries
+  `X-RelayLab-Replay-Id` so destinations can de-duplicate.
+- **Limits.** `REPLAY_PROJECT_CONCURRENCY` (2) running per project,
+  `REPLAY_PROJECT_QUEUE_DEPTH` (20) waiting or running per project,
+  `REPLAY_USER_RATE_PER_MINUTE` (30) creations per user per API instance, and
+  `OUTBOUND_MAX_CONCURRENCY` (8) in flight per worker.
+- **Stored results.** Status, response headers with sensitive values
+  `[REDACTED]`, and a body excerpt of at most `REPLAY_RESPONSE_EXCERPT_BYTES`
+  (64 KiB). The excerpt may contain the destination's own data and is kept with
+  the replay until its event or project is deleted. The UI renders it as text,
+  never as HTML.
+- **Local destinations.** Loopback and private addresses are blocked in every
+  environment, `OUTBOUND_ALLOW_HTTP` only allows `http://` to public addresses.
+  Use the test sink to try replay locally.
+- **Logs** contain the replay, job, and project ids, destination host,
+  outcome, tries, and duration; never bodies, header values, or query strings.
+  The audit log records `replay.created` with the destination host only.
 
 ## Operating notes
 

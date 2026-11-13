@@ -1,6 +1,6 @@
 # API reference
 
-The HTTP API that exists **today**. Later changes add replay; each one documents its routes here when it ships.
+The HTTP API that exists **today**. Later changes document their routes here when they ship.
 
 Everything is served from the application origin (`APP_ORIGIN`): the web app,
 the dashboard API under `/api/v1`, and authentication under `/api/auth`. The
@@ -39,6 +39,11 @@ SQL, file paths, or configuration values.
 | 409 | `endpoint_limit_reached` | Creating an endpoint beyond `LIMIT_ENDPOINTS_PER_PROJECT` |
 | 415 | `unsupported_media_type` | Body is not `application/json` |
 | 429 | `too_many_streams` | Opening a live event stream beyond `LIMIT_STREAMS_PER_USER` |
+| 409 | `idempotency_conflict` | An `Idempotency-Key` reused for a different replay request |
+| 422 | `invalid_destination` | A replay destination that is not allowed (`error.fields` says why) |
+| 429 | `replay_queue_full` | The project already has `REPLAY_PROJECT_QUEUE_DEPTH` replays waiting or running |
+| 429 | `rate_limited` | Replay creations beyond `REPLAY_USER_RATE_PER_MINUTE`; `Retry-After` says when to retry |
+| 503 | `replay_unavailable` | Replay is turned off, or (for URL destinations) no worker has reported an active outbound guard in the last 60 s |
 | 422 | `validation_failed` | A field is invalid; `error.fields` maps each field to a message |
 | 431 | `headers_too_large` | Headers over the limit |
 | 500 | `internal_error` | Unexpected failure (details only in server logs) |
@@ -358,6 +363,149 @@ maximum). Streams are closed at that point and clients resume transparently.
 curl -N "$APP_ORIGIN/api/v1/projects/$PROJECT_ID/events/stream" -b "$SESSION_COOKIE" \
   -H "Last-Event-ID: 019a6b1e-3c5d-7e8f-9a0b-1c2d3e4f5a6b"
 ```
+
+### Replays
+
+Re-send a stored event to a URL you control (through the
+[outbound guard](security/outbound-replay.md)) or to a **test sink**: another
+enabled endpoint of the same project, where the replay is stored as a new event
+without any network request. Replays run in the background; the original event
+is never changed. Every route requires a session and only works on the
+caller's projects (`404 not_found` otherwise); unsafe methods need the usual
+same-origin and JSON checks. Responses are `Cache-Control: no-store`.
+
+`GET /api/v1/config` reports `replay_enabled` (`REPLAY_ENABLED`) and
+`replay_url_available` (a worker reported an active outbound guard in the last
+60 s). Sink replays need only `replay_enabled`.
+
+#### Request body (preview and create)
+
+```json
+{
+  "destination": { "type": "url", "url": "https://hooks.example.com/receive" },
+  "method": "POST",
+  "header_overrides": { "Authorization": "Bearer …" }
+}
+```
+
+| Field | Rules |
+|---|---|
+| `destination` | `{"type":"url","url":"https://…"}` or `{"type":"sink","endpoint_id":"…"}`. URLs are checked without DNS when the request is made (scheme, credentials, host, port, internal and RelayLab hosts; `422 invalid_destination`) and fully when sent. A sink must be an enabled endpoint of the same project (`404` for any other) |
+| `method` | `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`; default the original method |
+| `header_overrides` | Optional object, at most 20 headers. Names are HTTP tokens; values at most 4 KiB; no CR, LF, or NUL. `Cookie`, `Host`, `Proxy-Authorization`, hop-by-hop, forwarding headers, and `X-RelayLab-Replay-Id` cannot be set (`422 validation_failed`). Values are stored encrypted, erased when the replay finishes, and always returned as `[REDACTED]` |
+
+The request sent is the original body byte for byte, the original
+`Content-Type`, the chosen method, and the URL exactly as entered (the original
+path and query are not added). Original headers are forwarded except
+credentials (the central redaction set), signature headers (any name containing
+`signature` or `hmac`), values removed at receipt, hop-by-hop and forwarding
+headers. Overrides are applied last. Every delivery carries
+`X-RelayLab-Replay-Id: <replay id>`; destinations should de-duplicate on it,
+because delivery is at least once.
+
+#### `POST /api/v1/projects/{projectId}/events/{eventId}/replays/preview`
+
+Validates the body and returns what would be sent; nothing is stored or sent.
+Errors are the same as for creation.
+
+```json
+{
+  "method": "POST",
+  "target": "https://hooks.example.com/receive",
+  "destination": { "type": "url", "url": "https://hooks.example.com/receive" },
+  "headers": [
+    { "name": "Content-Type", "value": "application/json", "redacted": false },
+    { "name": "Authorization", "value": "[REDACTED]", "redacted": true },
+    { "name": "X-Relaylab-Replay-Id", "value": "(assigned when the replay is created)", "redacted": false }
+  ],
+  "stripped_headers": ["Stripe-Signature", "Cookie"],
+  "body_size": 20,
+  "content_type": "application/json"
+}
+```
+
+#### `POST /api/v1/projects/{projectId}/events/{eventId}/replays`
+
+Queues a replay: `202` with the replay in state `queued`. With an
+`Idempotency-Key` header (at most 128 characters), repeating the same request
+within 24 hours returns the original replay with `200`; the same key with a
+different request is `409 idempotency_conflict`.
+
+```sh
+curl -X POST "$APP_ORIGIN/api/v1/projects/$PROJECT_ID/events/$EVENT_ID/replays" -b "$SESSION_COOKIE" \
+  -H "Origin: $APP_ORIGIN" -H "Content-Type: application/json" -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"destination":{"type":"sink","endpoint_id":"'"$SINK_ID"'"}}'
+```
+
+#### Replay objects
+
+```json
+{
+  "id": "019a6b2f-…",
+  "event_id": "019a6b1e-…",
+  "state": "succeeded",
+  "outcome": "succeeded",
+  "failure_category": null,
+  "failure_message": null,
+  "destination": { "type": "sink", "endpoint_id": "019a6b1d-…", "endpoint_name": "Sink" },
+  "target": "Test sink: Sink",
+  "method": "POST",
+  "tries": 1,
+  "response_status": 200,
+  "duration_ms": 12,
+  "created_at": "2026-11-13T09:20:00.123Z",
+  "finished_at": "2026-11-13T09:20:00.140Z"
+}
+```
+
+`state` is `queued`, `running`, `succeeded`, or `failed`. Any HTTP response,
+including 3xx, 4xx, and 5xx, is `succeeded`; `failed` carries a
+`failure_category` (an [outbound guard category](security/outbound-replay.md#outcomes-and-what-users-see),
+`sink_disabled`, `worker_lost`, or `override_unavailable`) and a safe
+`failure_message`. The detail adds `started_at`, `header_overrides` (names, values
+`[REDACTED]`), and `response`: `{status, headers, body}` where sensitive header
+values are `[REDACTED]` and `body` is an excerpt (at most
+`REPLAY_RESPONSE_EXCERPT_BYTES`, 64 KiB) as `text` (UTF-8) or `base64`, with
+`truncated`.
+
+#### `GET /api/v1/projects/{projectId}/replays` and `GET …/events/{eventId}/replays`
+
+Newest first. Parameters: `event_id` (project list only), `state`, `outcome`
+(`succeeded` or a failure category), `limit` (1–`LIMIT_PAGE_MAX`, default
+`REPLAY_HISTORY_PAGE_DEFAULT` 25), `cursor` (the previous `next_cursor`).
+Response: `{"items": [...], "next_cursor": "…" | null}`.
+
+#### `GET /api/v1/projects/{projectId}/replays/{replayId}`
+
+One replay with its detail.
+
+### Audit log
+
+#### `GET /api/v1/projects/{projectId}/audit-log`
+
+The project's recorded actions, newest first, with `limit` and `cursor` like the
+replay list. Read-only: there is no route that changes or deletes entries.
+
+```json
+{
+  "items": [
+    {
+      "id": "019a6b2f-…",
+      "action": "replay.created",
+      "actor_user_id": "u_…",
+      "actor_name": "Ada Lovelace",
+      "resource_type": "replay",
+      "resource_id": "019a6b2f-…",
+      "metadata": { "event_id": "019a6b1e-…", "destination_type": "url", "destination_host": "hooks.example.com", "method": "POST" },
+      "created_at": "2026-11-13T09:20:00.123Z"
+    }
+  ],
+  "next_cursor": null
+}
+```
+
+Metadata never contains URL paths, query strings, credentials, header values,
+bodies, or IP addresses.
 
 ## Webhook ingestion (`/h/*`)
 

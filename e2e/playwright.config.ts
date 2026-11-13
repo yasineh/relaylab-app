@@ -9,6 +9,7 @@ import { BASE_URL } from './fixtures/env.ts'
  */
 export default defineConfig({
   testDir: './tests',
+  testMatch: /\.(spec|disruptive)\.ts$/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // Flakiness must surface, not be hidden: no retries in CI.
@@ -29,14 +30,15 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      testIgnore: /signup-disabled\.spec\.ts/,
+      testMatch: /\.spec\.ts$/,
     },
     {
-      // Runs against the same stack restarted with AUTH_SIGNUP_ENABLED=false
-      // (`pnpm --filter @relaylab/e2e e2e:signup-disabled`).
-      name: 'signup-disabled',
+      // Tests that restart stack services. They run alone, after everything else.
+      name: 'disruptive',
       use: { ...devices['Desktop Chrome'] },
-      testMatch: /signup-disabled\.spec\.ts/,
+      testMatch: /\.disruptive\.ts$/,
+      dependencies: ['chromium'],
+      fullyParallel: false,
     },
   ],
 })

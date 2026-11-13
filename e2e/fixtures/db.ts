@@ -8,8 +8,10 @@ import { DATABASE_URL } from './env.ts'
  * (DATABASE_URL points at its published test port); no other environment
  * exposes this database or these credentials.
  */
-export async function withDb<T>(fn: (c: pg.Client) => Promise<T>): Promise<T> {
-  const client = new pg.Client({ connectionString: DATABASE_URL })
+const { Client } = pg
+
+export async function withDb<T>(fn: (c: InstanceType<typeof Client>) => Promise<T>): Promise<T> {
+  const client = new Client({ connectionString: DATABASE_URL })
   await client.connect()
   try {
     return await fn(client)

@@ -66,13 +66,14 @@ export function sendWebhook(
   return request.fetch(url, {
     method: w.method ?? 'POST',
     headers: w.headers ?? {},
-    ...(w.body === undefined ? {} : { data: w.body }),
+    // A Buffer is sent byte for byte; Playwright would re-encode some strings as JSON.
+    ...(w.body === undefined ? {} : { data: typeof w.body === 'string' ? Buffer.from(w.body) : w.body }),
     failOnStatusCode: false,
   })
 }
 
 /** Rewrites an endpoint URL to another host (the ingest-only api instance). */
-export const viaHost = (endpointUrl: string, base: string) => base + new URL(endpointUrl).pathname
+export const viaHost = (endpointUrl: string, origin: string) => origin + new URL(endpointUrl).pathname
 
 type Fixtures = {
   /** A freshly signed-up, verified, signed-in user in `page`. */

@@ -37,7 +37,14 @@ func (h *Handler) Routes(r chi.Router) {
 		r.Get("/stream", h.stream)
 	}
 	r.Get("/{eventId}", h.get)
+	r.Delete("/{eventId}", h.delete)
 	r.Get("/{eventId}/body", h.body)
+}
+
+// EndpointRoutes registers the event routes under an endpoint (mounted at
+// /projects/{projectId}/endpoints).
+func (h *Handler) EndpointRoutes(r chi.Router) {
+	r.Delete("/{endpointId}/events", h.clearEndpoint)
 }
 
 type summaryJSON struct {
@@ -200,6 +207,41 @@ func (h *Handler) body(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodHead {
 		_, _ = w.Write(b) //nolint:gosec // G705: inert download (octet-stream, attachment, nosniff, CSP sandbox)
 	}
+}
+
+// delete permanently deletes one event and its replays: 204, or 404 for
+// events the user cannot see.
+func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
+	owner, projectID, eventID, ok := h.scope(w, r, true)
+	if !ok {
+		return
+	}
+	if err := h.svc.Delete(r.Context(), owner, projectID, eventID); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// clearEndpoint deletes an endpoint's events in batches for up to 30
+// seconds and reports how many went; clients repeat until deleted is 0.
+func (h *Handler) clearEndpoint(w http.ResponseWriter, r *http.Request) {
+	owner, projectID, _, ok := h.scope(w, r, false)
+	if !ok {
+		return
+	}
+	endpointID, err := ParseID(chi.URLParam(r, "endpointId"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	n, err := h.svc.ClearEndpoint(r.Context(), owner, projectID, endpointID)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	httpx.WriteJSON(w, http.StatusOK, map[string]int64{"deleted": n})
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error) {

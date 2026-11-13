@@ -31,6 +31,7 @@ type routerDeps struct {
 	events    *events.Handler
 	replay    *replay.Handler    // nil in tests that do not need it
 	replayCfg replayAvailability // nil: replay reported unavailable
+	retention *config.Retention  // nil in tests that do not need it
 	ingestion *ingestion.Handler // public /h/{token}; never reads the session
 	web       http.Handler       // embedded SPA; nil when not built
 }
@@ -78,11 +79,14 @@ func newRouter(d routerDeps) http.Handler {
 			)
 			v1.NotFound(httpx.NotFound)
 			v1.MethodNotAllowed(httpx.MethodNotAllowed)
-			v1.Get("/config", publicConfig(d.auth, d.replayCfg))
+			v1.Get("/config", publicConfig(d.auth, d.replayCfg, d.retention))
 			v1.Get("/me", identity.Me)
 			v1.Route("/projects", func(pr chi.Router) {
 				d.projects.Routes(pr)
-				pr.Route("/{projectId}/endpoints", d.endpoints.Routes)
+				pr.Route("/{projectId}/endpoints", func(en chi.Router) {
+					d.endpoints.Routes(en)
+					d.events.EndpointRoutes(en)
+				})
 				pr.Route("/{projectId}/events", func(er chi.Router) {
 					d.events.Routes(er)
 					if d.replay != nil {
@@ -124,7 +128,7 @@ func unlessPublic(mw func(http.Handler) http.Handler) func(http.Handler) http.Ha
 }
 
 // publicConfigResponse is the body of GET /api/v1/config. It contains no user
-// data; later changes add retention settings.
+// data.
 type publicConfigResponse struct {
 	SignupEnabled             bool `json:"signup_enabled"`
 	EmailVerificationRequired bool `json:"email_verification_required"`
@@ -133,6 +137,15 @@ type publicConfigResponse struct {
 	// need only ReplayEnabled.
 	ReplayEnabled      bool `json:"replay_enabled"`
 	ReplayURLAvailable bool `json:"replay_url_available"`
+	// Retention is how long events are kept, for the retention notices.
+	Retention *retentionJSON `json:"retention,omitempty"`
+}
+
+// retentionJSON reports RETENTION_EVENT_TTL (0: events are not deleted by
+// age, development only) and RETENTION_MAX_EVENTS_PER_PROJECT.
+type retentionJSON struct {
+	EventTTLSeconds     int64 `json:"event_ttl_seconds"`
+	MaxEventsPerProject int   `json:"max_events_per_project"`
 }
 
 // replayAvailability is the replay gate as the config route needs it.
@@ -141,7 +154,7 @@ type replayAvailability interface {
 	URLAvailable(ctx context.Context) (bool, error)
 }
 
-func publicConfig(a *config.Auth, replayGate replayAvailability) http.HandlerFunc {
+func publicConfig(a *config.Auth, replayGate replayAvailability, ret *config.Retention) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body := publicConfigResponse{
 			SignupEnabled:             a.SignupEnabled,
@@ -151,6 +164,9 @@ func publicConfig(a *config.Auth, replayGate replayAvailability) http.HandlerFun
 			body.ReplayEnabled = replayGate.Enabled()
 			// A heartbeat read error reports URL replay unavailable (fail closed).
 			body.ReplayURLAvailable, _ = replayGate.URLAvailable(r.Context())
+		}
+		if ret != nil {
+			body.Retention = &retentionJSON{EventTTLSeconds: int64(ret.EventTTL.Seconds()), MaxEventsPerProject: ret.MaxEventsPerProject}
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		httpx.WriteJSON(w, http.StatusOK, body)

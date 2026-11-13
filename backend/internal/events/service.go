@@ -50,8 +50,9 @@ type Detail struct {
 
 // Service reads events for the acting user.
 type Service struct {
-	q   *store.Queries
-	red *redact.Redactor
+	q          *store.Queries
+	red        *redact.Redactor
+	clearLimit time.Duration // tests; 0 means clearBudget
 }
 
 // NewService returns the event read service. red must be the same redactor

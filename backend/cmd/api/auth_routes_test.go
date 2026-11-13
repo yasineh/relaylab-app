@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"relaylab/internal/identity"
 	"relaylab/internal/platform/config"
@@ -183,11 +184,31 @@ func TestPublicConfigReportsReplayAvailability(t *testing.T) {
 	a := &config.Auth{SignupEnabled: true}
 	for _, g := range []fakeReplayGate{{true, true}, {true, false}, {false, false}} {
 		rec := httptest.NewRecorder()
-		publicConfig(a, g)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+		publicConfig(a, g, nil)(rec, httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
 		var body map[string]any
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
 		if body["replay_enabled"] != g.enabled || body["replay_url_available"] != g.url {
 			t.Errorf("gate %+v: config %v", g, body)
+		}
+	}
+}
+
+func TestPublicConfigReportsRetention(t *testing.T) {
+	a := &config.Auth{}
+	for _, c := range []struct {
+		ttl  time.Duration
+		cap  int
+		want string
+	}{
+		{7 * 24 * time.Hour, 10000, `"retention":{"event_ttl_seconds":604800,"max_events_per_project":10000}`},
+		{24 * time.Hour, 200, `"retention":{"event_ttl_seconds":86400,"max_events_per_project":200}`},
+		{0, 10000, `"retention":{"event_ttl_seconds":0,"max_events_per_project":10000}`},
+	} {
+		rec := httptest.NewRecorder()
+		publicConfig(a, nil, &config.Retention{EventTTL: c.ttl, MaxEventsPerProject: c.cap})(rec,
+			httptest.NewRequest(http.MethodGet, "/api/v1/config", nil))
+		if !strings.Contains(rec.Body.String(), c.want) {
+			t.Errorf("ttl %v: %s", c.ttl, rec.Body)
 		}
 	}
 }

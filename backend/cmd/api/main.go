@@ -101,6 +101,12 @@ func runServer() int {
 			Error("invalid configuration", slog.String("error", err.Error()))
 		return 1
 	}
+	retentionCfg, err := config.LoadRetention(os.Getenv, cfg.Env)
+	if err != nil {
+		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
+			Error("invalid configuration", slog.String("error", err.Error()))
+		return 1
+	}
 	outCfg, err := config.LoadOutbound(os.Getenv, cfg)
 	if err != nil {
 		logging.New(os.Stderr, "api", string(cfg.Env), slog.LevelInfo).
@@ -206,6 +212,7 @@ func runServer() int {
 		ingestion: ingestHandler,
 		replay:    replayHandler,
 		replayCfg: replayGate,
+		retention: retentionCfg,
 		web:       webHandler(),
 	})
 	srv := httpx.NewServer(cfg.HTTPAddr, handler, cfg.Limits.HTTPMaxHeaderBytes, logger)

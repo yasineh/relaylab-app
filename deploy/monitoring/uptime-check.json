@@ -1,0 +1,17 @@
+{
+  "displayName": "relaylab-app readyz",
+  "monitoredResource": {
+    "type": "uptime_url",
+    "labels": { "project_id": "${GCP_PROJECT}", "host": "${APP_HOST}" }
+  },
+  "httpCheck": {
+    "path": "/readyz",
+    "port": 443,
+    "useSsl": true,
+    "validateSsl": true,
+    "requestMethod": "GET",
+    "acceptedResponseStatusCodes": [{ "statusValue": 200 }]
+  },
+  "period": "300s",
+  "timeout": "10s"
+}

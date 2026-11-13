@@ -63,6 +63,7 @@ type Executor interface {
 // Runner claims replay jobs and runs them with bounded concurrency.
 type Runner struct {
 	pool     *pgxpool.Pool
+	listenDB *pgxpool.Pool // direct connection for LISTEN
 	id       string
 	limits   *config.Replay
 	slots    int
@@ -76,13 +77,16 @@ type Runner struct {
 
 // RunnerOptions configure a Runner.
 type RunnerOptions struct {
-	Pool     *pgxpool.Pool
-	WorkerID string
-	Limits   *config.Replay
-	Slots    int // concurrent jobs in this process (outbound concurrency)
-	Executor Executor
-	Logger   *slog.Logger
-	Metrics  *Metrics
+	Pool *pgxpool.Pool
+	// ListenPool is a direct (unpooled) connection pool for LISTEN; nil
+	// means Pool, which is right unless Pool goes through a transaction pooler.
+	ListenPool *pgxpool.Pool
+	WorkerID   string
+	Limits     *config.Replay
+	Slots      int // concurrent jobs in this process (outbound concurrency)
+	Executor   Executor
+	Logger     *slog.Logger
+	Metrics    *Metrics
 
 	poll, reap time.Duration // tests
 }
@@ -90,11 +94,14 @@ type RunnerOptions struct {
 // NewRunner returns a runner; call Run to start it.
 func NewRunner(o RunnerOptions) *Runner {
 	r := &Runner{
-		pool: o.Pool, id: o.WorkerID, limits: o.Limits, slots: max(o.Slots, 1), exec: o.Executor,
+		pool: o.Pool, listenDB: o.ListenPool, id: o.WorkerID, limits: o.Limits, slots: max(o.Slots, 1), exec: o.Executor,
 		logger: o.Logger, metrics: o.Metrics, wake: make(chan struct{}, 1), poll: o.poll, reapTick: o.reap,
 	}
 	if r.logger == nil {
 		r.logger = slog.New(slog.DiscardHandler)
+	}
+	if r.listenDB == nil {
+		r.listenDB = r.pool
 	}
 	if r.poll <= 0 {
 		r.poll = pollInterval
@@ -259,7 +266,7 @@ func (r *Runner) Run(ctx context.Context) {
 // notifications and reconnects, so failures here only add latency.
 func (r *Runner) listen(ctx context.Context) {
 	for ctx.Err() == nil {
-		conn, err := r.pool.Acquire(ctx)
+		conn, err := r.listenDB.Acquire(ctx)
 		if err != nil {
 			sleep(ctx, time.Second)
 			continue

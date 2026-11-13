@@ -84,7 +84,7 @@ func TestCreate(t *testing.T) {
 func TestDefaultIngestHostIsAppOrigin(t *testing.T) {
 	e := fixture.New(t, "alice")
 	origin, _ := config.Load(func(k string) string {
-		return map[string]string{"DATABASE_URL": "postgres://u:p@h/d", "APP_ENV": "production", "APP_ORIGIN": "https://relaylab-abc.a.run.app"}[k]
+		return map[string]string{"DATABASE_URL": "postgres://u:p@h/d?sslmode=require", "APP_ENV": "production", "APP_ORIGIN": "https://relaylab-abc.a.run.app"}[k]
 	})
 	ep, err := config.LoadEndpoints(func(k string) string {
 		return map[string]string{

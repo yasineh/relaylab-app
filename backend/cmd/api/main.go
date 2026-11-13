@@ -174,7 +174,7 @@ func runServer() int {
 
 	// Live event stream: one LISTEN connection per instance fans out to
 	// streams. Streams end when shutdown starts so it is not held up.
-	listener, err := realtime.NewPGSource(cfg.DatabaseURL, logger)
+	listener, err := realtime.NewPGSource(cfg.DatabaseDirectURL, logger) // LISTEN needs a direct connection
 	if err != nil {
 		logger.Error("event listener setup failed", slog.String("error", err.Error()))
 		return 1

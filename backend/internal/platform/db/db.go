@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -29,6 +31,28 @@ func Open(ctx context.Context, dsn config.Secret) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, errors.New("invalid database configuration") // never echo the DSN
 	}
+	cfg.MaxConnLifetime = 30 * time.Minute
+	cfg.MaxConnIdleTime = 5 * time.Minute
+	cfg.ConnConfig.ConnectTimeout = 5 * time.Second
+	// Transaction-mode poolers (Neon's pooled endpoint, PgBouncer) hand each
+	// transaction to any server connection, so named prepared statements
+	// cannot be relied on. Cache only statement descriptions and execute
+	// unnamed statements, unless the URL chooses a mode itself
+	// (default_query_exec_mode=...).
+	if !strings.Contains(dsn.Reveal(), "default_query_exec_mode=") {
+		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeCacheDescribe
+	}
+	return pgxpool.NewWithConfig(ctx, cfg)
+}
+
+// OpenDirect opens a small pool on a direct (unpooled) connection, for work
+// that needs session semantics: LISTEN and session-level advisory locks.
+func OpenDirect(ctx context.Context, dsn config.Secret) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(dsn.Reveal())
+	if err != nil {
+		return nil, errors.New("invalid database configuration") // never echo the DSN
+	}
+	cfg.MaxConns = 4
 	cfg.MaxConnLifetime = 30 * time.Minute
 	cfg.MaxConnIdleTime = 5 * time.Minute
 	cfg.ConnConfig.ConnectTimeout = 5 * time.Second

@@ -90,6 +90,17 @@ func run() int {
 	}
 	defer pool.Close()
 
+	// LISTEN and the retention lock need a direct connection when
+	// DATABASE_URL goes through a transaction pooler (DATABASE_DIRECT_URL).
+	direct := pool
+	if cfg.DatabaseDirectURL.Reveal() != cfg.DatabaseURL.Reveal() {
+		if direct, err = db.OpenDirect(ctx, cfg.DatabaseDirectURL); err != nil {
+			logger.Error("database setup failed", slog.String("error", err.Error()))
+			return 1
+		}
+		defer direct.Close()
+	}
+
 	dbCheck, migCheck, err := health.PostgresChecks(pool)
 	if err != nil {
 		logger.Error("health setup failed", slog.String("error", err.Error()))
@@ -98,7 +109,7 @@ func run() int {
 	checker := health.New(dbCheck, migCheck)
 
 	workerID := newWorkerID()
-	go retention.New(pool, retentionCfg, logger, retention.NewMetrics(registry)).Run(ctx)
+	go retention.New(direct, retentionCfg, logger, retention.NewMetrics(registry)).Run(ctx)
 	go replay.NewHeartbeat(pool, workerID, outbound.UserAgent(), guard, logger).Run(ctx)
 	// Replay jobs always run: test-sink replays never leave RelayLab and work
 	// with REPLAY_ENABLED off; URL replays are refused unless it is on.
@@ -117,7 +128,7 @@ func run() int {
 			Red: redact.New(ingestCfg.RedactExtraHeaders, ingestCfg.RedactExtraParams),
 		})
 		runner := replay.NewRunner(replay.RunnerOptions{
-			Pool: pool, WorkerID: workerID, Limits: replayCfg, Slots: outCfg.MaxConcurrency,
+			Pool: pool, ListenPool: direct, WorkerID: workerID, Limits: replayCfg, Slots: outCfg.MaxConcurrency,
 			Executor: deliverer, Logger: logger, Metrics: replayMetrics,
 		})
 		deliverer.Bind(runner)

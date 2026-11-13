@@ -24,7 +24,7 @@ passed.
 
 | Job | Fails when |
 |---|---|
-| **Backend lint** | gofmt would change a file, `go vet` or golangci-lint report issues (config: `backend/.golangci.yml`), or generated sqlc code is stale (`sqlc diff`) |
+| **Backend lint** | gofmt would change a file, `go vet` or golangci-lint report issues (config: `backend/.golangci.yml`), generated sqlc code is stale (`sqlc diff`), actionlint finds a problem in any workflow, or the deploy manifests fail the offline check (`deploy/render.sh --check`) |
 | **Backend test** | Any Go test fails (race detector, real PostgreSQL 17 service). This includes `TestMigrateUpDownUp`, which runs goose up → down → up on a fresh database. Also fails if either binary does not build |
 | **Frontend** | Prettier, oxlint, TypeScript (`tsc -b`, strict), Vitest, or the production build fails |
 | **Auth service** | Prettier, oxlint, TypeScript, or the Vitest suite (against a real PostgreSQL) fails for `auth/`, or Better Auth migrations fail on a fresh database or are not idempotent |

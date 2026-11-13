@@ -1,13 +1,14 @@
-import { FileQuestion, Info, Loader2 } from 'lucide-react'
+import { FileQuestion, Info, Loader2, Trash2 } from 'lucide-react'
 import { useId, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { CopyButton } from '@/components/copy-button'
 import { Alert } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
 import { Tabs } from '@/components/ui/tabs'
 import { useEndpoint } from '@/features/endpoints/api'
-import { eventBodyPath, useEvent, type Entry, type EventDetail } from '@/features/events/api'
+import { eventBodyPath, useDeleteEvent, useEvent, type Entry, type EventDetail } from '@/features/events/api'
 import { headersText, queryText, rawRequestText, requestTarget } from '@/features/events/copy-text'
 import { buildCurl } from '@/features/events/curl'
 import { MethodBadge } from '@/features/events/MethodBadge'
@@ -75,9 +76,10 @@ function EventView({ projectId, event: e }: { projectId: string; event: EventDet
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <MethodBadge method={e.method} />
-          <h2 className="font-mono text-lg font-semibold break-all">
+          <h2 className="min-w-0 flex-1 font-mono text-lg font-semibold break-all">
             <VisibleText text={requestTarget(e)} />
           </h2>
+          <DeleteEvent projectId={projectId} eventId={e.id} />
         </div>
         <p className="text-sm text-muted-foreground">
           Received <time dateTime={e.received_at}>{formatPreciseDateTime(e.received_at)}</time> by{' '}
@@ -128,6 +130,59 @@ function EventView({ projectId, event: e }: { projectId: string; event: EventDet
         ]}
       />
     </div>
+  )
+}
+
+function DeleteEvent({ projectId, eventId }: { projectId: string; eventId: string }) {
+  const del = useDeleteEvent(projectId, eventId)
+  const navigate = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function close() {
+    setError(null)
+    setOpen(false)
+  }
+
+  async function confirm() {
+    setError(null)
+    try {
+      await del.mutateAsync()
+      void navigate(`/projects/${projectId}/events`, { replace: true })
+    } catch (err) {
+      if (isApiError(err) && err.status === 404) {
+        void navigate(`/projects/${projectId}/events`, { replace: true }) // already gone
+        return
+      }
+      setError('The event could not be deleted. Try again.')
+    }
+  }
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Trash2 aria-hidden="true" /> Delete event
+      </Button>
+      <Dialog
+        open={open}
+        onClose={close}
+        title="Delete this event?"
+        description="This permanently deletes the event and its replay history. It cannot be undone."
+      >
+        <div className="space-y-4">
+          {error ? <Alert tone="error">{error}</Alert> : null}
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={close} data-autofocus>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void confirm()} disabled={del.isPending}>
+              {del.isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {del.isPending ? 'Deleting…' : 'Delete event'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    </>
   )
 }
 

@@ -1,4 +1,4 @@
-import { Loader2, Pencil, RefreshCw, Trash2, Unlink } from 'lucide-react'
+import { Eraser, Loader2, Pencil, RefreshCw, Trash2, Unlink } from 'lucide-react'
 import { useId, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 
@@ -18,6 +18,8 @@ import {
 } from '@/features/endpoints/api'
 import { EnabledBadge } from '@/features/endpoints/EnabledBadge'
 import { EndpointNameDialog } from '@/features/endpoints/EndpointNameDialog'
+import { useClearEndpointEvents } from '@/features/events/api'
+import { PrivacyNotice } from '@/features/events/RetentionNotice'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { isApiError } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
@@ -77,8 +79,10 @@ function EndpointDetail({ projectId, endpoint: e }: { projectId: string; endpoin
       </div>
 
       <ReceivingUrl endpoint={e} />
+      <PrivacyNotice />
       <EnabledSection projectId={projectId} endpoint={e} />
       <RotateSection projectId={projectId} endpoint={e} />
+      <ClearEventsSection projectId={projectId} endpoint={e} />
       <DeleteSection projectId={projectId} endpoint={e} />
 
       <EndpointNameDialog
@@ -269,6 +273,99 @@ function RotateSection({ projectId, endpoint: e }: { projectId: string; endpoint
             </Button>
           </div>
         </div>
+      </Dialog>
+    </section>
+  )
+}
+
+function ClearEventsSection({ projectId, endpoint: e }: { projectId: string; endpoint: Endpoint }) {
+  const clear = useClearEndpointEvents(projectId, e.id)
+  const inputId = useId()
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [cleared, setCleared] = useState<number | null>(null)
+  const matches = typed === e.name
+
+  function close() {
+    setTyped('')
+    setError(null)
+    setOpen(false)
+  }
+
+  async function onClear(ev: React.FormEvent) {
+    ev.preventDefault()
+    if (!matches) return
+    setError(null)
+    try {
+      const n = await clear.mutateAsync()
+      close()
+      setCleared(n)
+    } catch {
+      setError('The events could not all be deleted. Some may already be gone. Try again.')
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="clear-heading"
+      className="space-y-3 rounded-lg border border-destructive/40 bg-card p-6"
+    >
+      <div className="space-y-1">
+        <h3 id="clear-heading" className="font-semibold">
+          Clear events
+        </h3>
+        <p className="text-sm text-muted-foreground">
+          Permanently deletes every event this endpoint has received, with their replay history. The endpoint
+          and its URL stay.
+        </p>
+      </div>
+      {cleared !== null ? (
+        <Alert tone="success">
+          {cleared === 0
+            ? 'There were no events to delete.'
+            : `Deleted ${cleared.toLocaleString()} ${cleared === 1 ? 'event' : 'events'}.`}
+        </Alert>
+      ) : null}
+      <Button
+        variant="outline"
+        onClick={() => {
+          setCleared(null)
+          setOpen(true)
+        }}
+      >
+        <Eraser aria-hidden="true" /> Clear events
+      </Button>
+      <Dialog
+        open={open}
+        onClose={close}
+        title="Clear all events?"
+        description="This deletes every event this endpoint has received, and their replay history. It cannot be undone."
+      >
+        <form onSubmit={(ev) => void onClear(ev)} className="space-y-4" aria-label="Clear events">
+          {error ? <Alert tone="error">{error}</Alert> : null}
+          <div className="space-y-1.5">
+            <Label htmlFor={inputId}>
+              Type <span className="font-mono break-all">{e.name}</span> to confirm
+            </Label>
+            <Input
+              id={inputId}
+              autoComplete="off"
+              data-autofocus
+              value={typed}
+              onChange={(ev) => setTyped(ev.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={close}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="destructive" disabled={!matches || clear.isPending}>
+              {clear.isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : null}
+              {clear.isPending ? 'Deleting…' : 'Clear events'}
+            </Button>
+          </div>
+        </form>
       </Dialog>
     </section>
   )

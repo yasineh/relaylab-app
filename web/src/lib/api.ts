@@ -87,6 +87,8 @@ export type PublicConfig = {
   replay_enabled?: boolean
   /** URL replay also needs a worker reporting an active outbound guard. */
   replay_url_available?: boolean
+  /** How long events are kept (add-event-retention). event_ttl_seconds 0: not deleted by age. */
+  retention?: { event_ttl_seconds: number; max_events_per_project: number }
 }
 
 export const fetchMe = (signal?: AbortSignal) => apiFetch<Me>('/api/v1/me', { signal })

@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiFetch } from '@/lib/api'
 
@@ -112,5 +112,47 @@ export function useEvent(projectId: string, eventId: string) {
   return useQuery({
     queryKey: eventKey(projectId, eventId),
     queryFn: ({ signal }) => apiFetch<EventDetail>(eventPath(projectId, eventId), { signal }),
+  })
+}
+
+/** Permanently deletes one event and its replays (204). */
+export function useDeleteEvent(projectId: string, eventId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<void>(eventPath(projectId, eventId), { method: 'DELETE' }),
+    onSuccess: () => {
+      client.removeQueries({ queryKey: eventKey(projectId, eventId) })
+      void client.invalidateQueries({ queryKey: ['events', projectId] })
+      void client.invalidateQueries({ queryKey: ['replays', projectId] })
+    },
+  })
+}
+
+const clearPath = (projectId: string, endpointId: string) =>
+  `/api/v1/projects/${encodeURIComponent(projectId)}/endpoints/${encodeURIComponent(endpointId)}/events`
+
+/**
+ * Deletes every event of an endpoint. The server works in time-boxed batches
+ * and reports how many it deleted; this repeats until it reports 0 and
+ * resolves with the total.
+ */
+export function useClearEndpointEvents(projectId: string, endpointId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      let total = 0
+      for (;;) {
+        const { deleted } = await apiFetch<{ deleted: number }>(clearPath(projectId, endpointId), {
+          method: 'DELETE',
+        })
+        if (deleted === 0) return total
+        total += deleted
+      }
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['events', projectId] })
+      void client.invalidateQueries({ queryKey: ['event', projectId] })
+      void client.invalidateQueries({ queryKey: ['replays', projectId] })
+    },
   })
 }

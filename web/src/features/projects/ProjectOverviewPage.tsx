@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { buttonVariants } from '@/components/ui/button'
 
 import { RecentEvents } from '@/features/events/RecentEvents'
+import { PrivacyNotice, RetentionNote } from '@/features/events/RetentionNotice'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { formatDateTime } from '@/lib/format'
 
@@ -45,6 +46,11 @@ export function ProjectOverviewPage() {
           </Link>
         </section>
         <RecentEvents projectId={project.id} />
+      </div>
+
+      <div className="max-w-2xl space-y-2">
+        <PrivacyNotice />
+        <RetentionNote />
       </div>
 
       <p className="text-xs text-muted-foreground">

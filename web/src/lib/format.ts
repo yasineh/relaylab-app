@@ -35,3 +35,11 @@ export function formatPreciseDateTime(iso: string): string {
     new Date(iso),
   )
 }
+
+/** Formats a retention period in seconds as "24 hours" or "7 days" (days from 2 whole days up). */
+export function formatRetention(seconds: number): string {
+  const day = 86_400
+  if (seconds >= 2 * day && seconds % day === 0) return `${seconds / day} days`
+  const h = Math.max(1, Math.round(seconds / 3600))
+  return `${h} ${h === 1 ? 'hour' : 'hours'}`
+}

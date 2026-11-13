@@ -18,6 +18,7 @@ import { ConnectionStatus } from '@/features/events/ConnectionStatus'
 import { EventFilterBar } from '@/features/events/EventFilterBar'
 import { useLiveEventList } from '@/features/events/live'
 import { MethodBadge } from '@/features/events/MethodBadge'
+import { RetentionNote } from '@/features/events/RetentionNotice'
 import { formatBytes } from '@/features/events/payload/bytes'
 import { VisibleText } from '@/features/events/payload/RawText'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
@@ -40,10 +41,13 @@ export function EventListPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-muted-foreground">
-          Every request your endpoints received, newest first. Payloads may contain confidential or personal
-          data.
-        </p>
+        <div className="max-w-2xl space-y-1">
+          <p className="text-muted-foreground">
+            Every request your endpoints received, newest first. Payloads may contain confidential or personal
+            data.
+          </p>
+          <RetentionNote />
+        </div>
         <ConnectionStatus state={live.state} />
       </div>
       <EventFilterBar

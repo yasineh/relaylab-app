@@ -179,7 +179,9 @@ func isSPAPath(r *http.Request) bool {
 		return false
 	}
 	p := r.URL.Path
-	for _, prefix := range []string{"/api", "/h"} {
+	// /debug: no debug or profiling routes exist, and these paths must say so
+	// with a 404 rather than load the web app.
+	for _, prefix := range []string{"/api", "/h", "/debug"} {
 		if p == prefix || strings.HasPrefix(p, prefix+"/") {
 			return false
 		}

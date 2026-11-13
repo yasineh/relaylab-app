@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os/exec"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -249,6 +250,31 @@ func TestEventPagesCSP(t *testing.T) {
 		}
 		if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("%s: missing nosniff", p)
+		}
+	}
+}
+
+// No debug or profiling routes exist (production-readiness spec, "Debug
+// routes absent"): these paths are a 404 with the standard envelope, even
+// with the web app embedded, and net/http/pprof is not linked into the
+// binary. (expvar is linked through the Prometheus client, but it registers
+// only on http.DefaultServeMux, which RelayLab never serves.)
+func TestDebugRoutesAbsent(t *testing.T) {
+	h := testRouter(t, fakeSPA)
+	for _, p := range []string{"/debug/pprof/", "/debug/pprof/heap", "/debug/vars", "/debug"} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, p, nil))
+		if rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), `"code":"not_found"`) {
+			t.Fatalf("%s: %d %s", p, rec.Code, rec.Body)
+		}
+	}
+	out, err := exec.Command("go", "list", "-deps", ".").Output()
+	if err != nil {
+		t.Skipf("go list unavailable: %v", err)
+	}
+	for _, dep := range strings.Fields(string(out)) {
+		if dep == "net/http/pprof" {
+			t.Fatalf("the api binary links %s", dep)
 		}
 	}
 }

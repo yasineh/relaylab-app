@@ -1,0 +1,30 @@
+# relaylab-migrate-app: goose migrations for the app schema (app_migrator),
+# after relaylab-migrate-auth. Forward-only and idempotent.
+# NOT DEPLOYED: see docs/deployment.md.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: relaylab-migrate-app
+  labels:
+    cloud.googleapis.com/location: "${REGION}"
+spec:
+  template:
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: "${MIGRATE_SERVICE_ACCOUNT}"
+          maxRetries: 0
+          timeoutSeconds: 600
+          containers:
+            - name: migrate
+              image: "${IMAGE_APP}"
+              command: ["/usr/local/bin/api", "migrate"]
+              env:
+                - name: APP_ENV
+                  value: production
+                - name: MIGRATION_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: relaylab-app-migrator-url
+                      key: latest

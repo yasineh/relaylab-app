@@ -1,0 +1,71 @@
+# relaylab-worker: replay jobs and the retention purge. No public ingress;
+# its health port answers Cloud Run's startup probe only. CPU stays
+# allocated because it works in the background, not per request.
+# NOT DEPLOYED: see docs/deployment.md.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: relaylab-worker
+  labels:
+    cloud.googleapis.com/location: "${REGION}"
+  annotations:
+    run.googleapis.com/ingress: internal
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        # One worker: OUTBOUND_MAX_CONCURRENCY applies per process.
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      serviceAccountName: "${WORKER_SERVICE_ACCOUNT}"
+      containers:
+        - name: worker
+          image: "${IMAGE_APP}"
+          command: ["/usr/local/bin/worker"]
+          ports:
+            - name: http1
+              containerPort: 8081
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_ORIGIN
+              value: "${APP_ORIGIN}"
+            - name: INGEST_BASE_URL
+              value: "${APP_ORIGIN}"
+            - name: WORKER_HEALTH_ADDR
+              value: ":8081"
+            - name: REPLAY_ENABLED
+              value: "${REPLAY_ENABLED}"
+            - name: RETENTION_EVENT_TTL
+              value: "${RETENTION_EVENT_TTL}"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-database-url
+                  key: latest
+            - name: DATABASE_DIRECT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-database-direct-url
+                  key: latest
+            - name: REPLAY_OVERRIDE_ENC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-replay-override-key
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            periodSeconds: 3
+            failureThreshold: 20
+  traffic:
+    - latestRevision: true
+      percent: 100

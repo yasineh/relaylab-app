@@ -1,0 +1,158 @@
+# relaylab-app: the Go API (ingress) with the Better Auth service as a
+# localhost sidecar, so the browser sees one origin on the default *.run.app
+# domain (D2, D14). Rendered by deploy/render.sh; the dollar-brace names are deploy-time
+# values, never secrets. Secrets come from Secret Manager (secretKeyRef).
+# NOT DEPLOYED: see docs/deployment.md.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: relaylab-app
+  labels:
+    cloud.googleapis.com/location: "${REGION}"
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        # Per-instance rate limits (D6) multiply by instances: keep it small.
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/startup-cpu-boost: "true"
+        # Start the auth sidecar before the api, which proxies /api/auth to it.
+        run.googleapis.com/container-dependencies: '{"api":["auth"]}'
+    spec:
+      serviceAccountName: "${APP_SERVICE_ACCOUNT}"
+      # Live event streams (SSE) stay open; handlers enforce their own budgets.
+      timeoutSeconds: 3600
+      containerConcurrency: 80
+      containers:
+        - name: api
+          image: "${IMAGE_APP}"
+          command: ["/usr/local/bin/api"]
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_ORIGIN
+              value: "${APP_ORIGIN}"
+            - name: INGEST_BASE_URL
+              value: "${APP_ORIGIN}"
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: AUTH_SERVICE_URL
+              value: http://localhost:3001
+            - name: TRUSTED_PROXY_CIDRS
+              value: "${TRUSTED_PROXY_CIDRS}"
+            - name: REPLAY_ENABLED
+              value: "${REPLAY_ENABLED}"
+            - name: DEMO_ENABLED
+              value: "${DEMO_ENABLED}"
+            - name: RETENTION_EVENT_TTL
+              value: "${RETENTION_EVENT_TTL}"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-database-url
+                  key: latest
+            - name: DATABASE_DIRECT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-database-direct-url
+                  key: latest
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-better-auth-secret
+                  key: latest
+            - name: AUTH_PROXY_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-auth-proxy-secret
+                  key: latest
+            - name: ENDPOINT_TOKEN_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-endpoint-token-hmac-key
+                  key: latest
+            - name: ENDPOINT_TOKEN_ENC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-endpoint-token-enc-key
+                  key: latest
+            - name: REPLAY_OVERRIDE_ENC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-replay-override-key
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 30
+        - name: auth
+          image: "${IMAGE_AUTH}"
+          command: ["node", "src/main.ts"]
+          resources:
+            limits:
+              cpu: "1"
+              memory: 256Mi
+          env:
+            - name: APP_ENV
+              value: production
+            - name: APP_ORIGIN
+              value: "${APP_ORIGIN}"
+            - name: AUTH_PORT
+              value: "3001"
+            - name: DEMO_ENABLED
+              value: "${DEMO_ENABLED}"
+            - name: SMTP_HOST
+              value: "${SMTP_HOST}"
+            - name: SMTP_PORT
+              value: "${SMTP_PORT}"
+            - name: SMTP_USER
+              value: "${SMTP_USER}"
+            - name: MAIL_FROM
+              value: "${MAIL_FROM}"
+            - name: AUTH_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-auth-database-url
+                  key: latest
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-better-auth-secret
+                  key: latest
+            - name: AUTH_PROXY_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-auth-proxy-secret
+                  key: latest
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: relaylab-smtp-password
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: 3001
+            periodSeconds: 3
+            failureThreshold: 20
+  traffic:
+    - latestRevision: true
+      percent: 100

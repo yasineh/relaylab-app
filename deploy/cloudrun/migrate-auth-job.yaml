@@ -1,0 +1,31 @@
+# relaylab-migrate-auth: Better Auth migrations (auth_migrator). Runs first:
+# app tables reference auth."user" (D15). The deploy workflow executes it,
+# then relaylab-migrate-app, and waits for each.
+# NOT DEPLOYED: see docs/deployment.md.
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: relaylab-migrate-auth
+  labels:
+    cloud.googleapis.com/location: "${REGION}"
+spec:
+  template:
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          serviceAccountName: "${MIGRATE_SERVICE_ACCOUNT}"
+          maxRetries: 0
+          timeoutSeconds: 600
+          containers:
+            - name: migrate
+              image: "${IMAGE_AUTH}"
+              command: ["node", "src/cli/migrate.ts"]
+              env:
+                - name: APP_ENV
+                  value: production
+                - name: AUTH_MIGRATION_DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: relaylab-auth-migrator-url
+                      key: latest

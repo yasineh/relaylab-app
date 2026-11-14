@@ -10,7 +10,7 @@ from clients that are not browsers.
 ## Conventions
 
 - **Format**: JSON request and response bodies. Requests with a body to `/api/v1` must use `Content-Type: application/json`.
-- **Authentication**: the session cookie set by `/api/auth`. See [Authentication and sessions](security/authentication.md).
+- **Authentication**: the session cookie set by `/api/auth`. See [Authentication and sessions](architecture/auth.md).
 - **CSRF**: `POST`, `PUT`, `PATCH`, and `DELETE` on `/api/v1` require `Origin: <APP_ORIGIN>`. When the browser sends no `Origin`, `Sec-Fetch-Site: same-origin` is required instead.
 - **Request IDs**: every response has `X-Request-ID`. A safe inbound value (1–64 characters of `[A-Za-z0-9._-]`) is reused.
 - **Limits**: request headers up to `LIMIT_HTTP_MAX_HEADER_BYTES` (32 KiB); `/api` bodies up to `LIMIT_API_MAX_BODY_BYTES` (64 KiB); proxied `/api/auth` requests are bounded by `LIMIT_AUTH_PROXY_TIMEOUT_SECONDS` (10 s); `LIMIT_PROJECTS_PER_USER` projects per user (20); `LIMIT_ENDPOINTS_PER_PROJECT` endpoints per project (25); list pages of `LIMIT_PAGE_DEFAULT` items (50) and at most `LIMIT_PAGE_MAX` (100); `LIMIT_STREAMS_PER_USER` open live event streams per user, per API instance (5).
@@ -524,7 +524,7 @@ values are `[REDACTED]` and `body` is an excerpt (at most
 `REPLAY_RESPONSE_EXCERPT_BYTES`, 64 KiB) as `text` (UTF-8) or `base64`, with
 `truncated`.
 
-#### `GET /api/v1/projects/{projectId}/replays` and `GET …/events/{eventId}/replays`
+#### `GET /api/v1/projects/{projectId}/replays` and `GET /api/v1/projects/{projectId}/events/{eventId}/replays`
 
 Newest first. Parameters: `event_id` (project list only), `state`, `outcome`
 (`succeeded` or a failure category), `limit` (1–`LIMIT_PAGE_MAX`, default

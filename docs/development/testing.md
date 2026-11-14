@@ -10,7 +10,7 @@ end-to-end suite needs Docker and takes about a minute once images are built.
 | End-to-end, in a real browser against the full stack | `pnpm e2e` | Docker, Chromium for Playwright |
 
 The unit and integration suites are described in
-[Development: Tests](../development.md#tests). This page covers the
+[Development: Tests](README.md#tests). This page covers the
 end-to-end suite.
 
 ## End-to-end suite

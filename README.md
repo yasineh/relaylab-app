@@ -28,12 +28,12 @@ pnpm dev        # Postgres + Mailpit + migrations, then web, API, worker, and au
 
 Open <http://localhost:5173> and create an account at `/sign-up`; the
 verification email arrives in Mailpit at <http://localhost:8025>. `pnpm test`, `pnpm lint`, and `pnpm build` also
-run from the root. See the [development guide](docs/development.md) for all
+run from the root. See the [development guide](docs/development/README.md) for all
 commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 
 ## Documentation
 
-- [Development guide](docs/development.md)
+- [Development guide](docs/development/README.md)
 - [Testing](docs/development/testing.md) (unit, integration, and end-to-end)
 - [Continuous integration](docs/ci.md)
 - [Deployment](docs/deployment.md) (prepared; not deployed yet)
@@ -41,7 +41,7 @@ commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
 - [Database schema](docs/architecture/erd.md)
 - [Brand and design system](docs/design/design-system.md)
 - [API reference](docs/api.md)
-- [Authentication and sessions](docs/security/authentication.md)
+- [Authentication and sessions](docs/architecture/auth.md)
 - [Received events](docs/security/events.md)
 - [Outbound requests and SSRF protections](docs/security/outbound-replay.md)
 - [Data retention and deletion](docs/security/data-retention.md)

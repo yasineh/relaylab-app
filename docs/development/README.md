@@ -99,14 +99,14 @@ If a port is taken on your machine, change it in `.env`:
 | `pnpm create-user -- --email … --name …` | Create a verified account; password from stdin |
 | `pnpm test` | Web tests, auth service tests, and Go unit + integration tests (including the auth contract tests when Node and `pnpm install` are available) |
 | `pnpm test:contract` | Only the auth contract and auth-schema tests (real auth service + Go proxy and validator) |
-| `pnpm e2e` / `pnpm e2e:down` | Build and start the end-to-end stack and run the Playwright suite; stop it ([Testing](development/testing.md)) |
+| `pnpm e2e` / `pnpm e2e:down` | Build and start the end-to-end stack and run the Playwright suite; stop it ([Testing](testing.md)) |
 | `pnpm lint` | oxlint for web, auth, and e2e; `go vet`, gofmt, golangci-lint, and sqlc drift for backend |
 | `pnpm typecheck` | TypeScript for web, auth, and e2e |
 | `pnpm format` / `pnpm format:check` | Prettier for web, auth, and e2e; gofmt for backend |
 | `pnpm build` | Production web build and an API binary that embeds it (`backend/bin/`) |
 | `pnpm check` | Format check, lint, typecheck, tests and build: run before pushing |
 | `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
-| `pnpm deploy:check` | Validate the Cloud Run manifests offline and lint every workflow ([Deployment](deployment.md)) |
+| `pnpm deploy:check` | Validate the Cloud Run manifests offline and lint every workflow ([Deployment](../deployment.md)) |
 | `pnpm secrets:scan` | gitleaks over the working tree |
 
 Package-level scripts also work, for example
@@ -134,7 +134,7 @@ deployment environment, never a file.
 | `SHUTDOWN_GRACE` | `20s` | Time allowed for in-flight work on SIGTERM. Open live event streams are closed at once so they don't hold it up |
 | `STREAM_REVALIDATE_INTERVAL` | `60s` | How often a live event stream re-checks its session and project; 1s to 60s |
 
-Authentication and mail ([details](security/authentication.md)):
+Authentication and mail ([details](../architecture/auth.md)):
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -150,7 +150,7 @@ Authentication and mail ([details](security/authentication.md)):
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD` | — | Mail server. Required in production. Without `SMTP_HOST` outside production, emails are only logged as captured, not delivered |
 | `MAIL_FROM` | `RelayLab <no-reply@relaylab.localhost>` | Sender address. Quote it in `.env` because of the `<` |
 
-Replay, read by the API and the worker ([details](security/outbound-replay.md#replay)):
+Replay, read by the API and the worker ([details](../security/outbound-replay.md#replay)):
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -167,7 +167,7 @@ Landing page links, read by the API (reported in `GET /api/v1/config`):
 | `DEMO_VIDEO_URL` | empty | An https link to the product demo video; the landing page shows "Watch the demo" only when set |
 | `PUBLIC_REPO_URL` | empty | The public repository (https). The footer shows "Source code" and "Documentation" (`<repo>/tree/main/docs`) only when set; keep it empty while the repository is private |
 
-Demo workspaces, read by the API, the worker, and the auth service ([details](security/authentication.md#demo-users)):
+Demo workspaces, read by the API, the worker, and the auth service ([details](../architecture/auth.md#demo-users)):
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -177,7 +177,7 @@ Demo workspaces, read by the API, the worker, and the auth service ([details](se
 | `DEMO_MAX_PROJECTS`, `DEMO_MAX_ENDPOINTS`, `DEMO_MAX_EVENTS`, `DEMO_MAX_STREAMS` | 1, 2, 200, 2 | Demo users' limits |
 | `DEMO_INGEST_RATE_PER_MINUTE`, `DEMO_INGEST_BURST` | 10, 5 | Webhooks a demo endpoint accepts |
 
-Data retention, read by the worker (purge) and the API (reported in `GET /api/v1/config`) ([details](security/data-retention.md)):
+Data retention, read by the worker (purge) and the API (reported in `GET /api/v1/config`) ([details](../security/data-retention.md)):
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -186,7 +186,7 @@ Data retention, read by the worker (purge) and the API (reported in `GET /api/v1
 | `RETENTION_AUDIT_TTL`, `RETENTION_JOB_TTL` | `2160h`, `168h` | Audit log entries; finished (done or dead) jobs |
 | `RETENTION_INTERVAL` | `10m` | Time between purge runs (1m to 24h) |
 
-Outbound requests (replay destinations), read by the worker ([details](security/outbound-replay.md)):
+Outbound requests (replay destinations), read by the worker ([details](../security/outbound-replay.md)):
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -219,7 +219,7 @@ value is hard-coded anywhere else.
 
 RelayLab keeps its tables in the `app` schema. The `auth` schema belongs to the
 Better Auth service (users, sessions, credentials); see the
-[ERD](architecture/erd.md).
+[ERD](../architecture/erd.md).
 
 | Role | Can do | Used by |
 |---|---|---|
@@ -279,7 +279,7 @@ unless `RELAYLAB_REQUIRE_AUTH=1` (set by `pnpm test:contract` and the CI
 `auth-contract` job).
 
 The browser end-to-end suite (`pnpm e2e`) runs against a separate Docker
-Compose stack; see [Testing](development/testing.md).
+Compose stack; see [Testing](testing.md).
 
 ## Logging and errors
 

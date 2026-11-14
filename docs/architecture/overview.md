@@ -67,7 +67,7 @@ fall back to the web app when it is embedded.
   CORS. The Go API validates every `/api/v1` session itself (signature check,
   then a read-only lookup) and takes the acting user only from that session.
   The auth service is reachable only through the API proxy, which proves itself
-  with a shared secret. Details: [Authentication and sessions](../security/authentication.md).
+  with a shared secret. Details: [Authentication and sessions](auth.md).
 - **Database privileges**: the API and worker connect as `app_runtime`, which
   cannot create, alter, or drop objects, and can only read two `auth` tables.
   The auth service connects as `auth_runtime`. Only the migrate commands use

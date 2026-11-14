@@ -112,6 +112,12 @@ pnpm --filter @relaylab/e2e screenshots
 
 It writes `web/src/assets/screenshots/*.jpg` and `web/public/og-image.png`.
 
+### Product demo recording
+
+`pnpm --filter @relaylab/e2e record-demo` records the product walkthrough
+as a 1080p video against the production-mode stack. See the
+[demo walkthrough](../demo/walkthrough.md).
+
 ### Rules for new tests
 
 - **Isolation.** Each test signs up its own user (`e2e+<uuid>@example.test`)

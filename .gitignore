@@ -27,3 +27,4 @@ backend/internal/webui/dist/
 # End-to-end test output
 e2e/playwright-report/
 e2e/test-results/
+e2e/recordings/

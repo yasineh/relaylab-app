@@ -4,6 +4,7 @@
 
 - [Getting started](guide/getting-started.md): open RelayLab, create a project and an endpoint, send a test webhook with curl.
 - [Inspecting and replaying webhooks](guide/webhook-workflow.md): how requests are received, reading headers, query, and body, replaying, and reading the result.
+- [Product demo walkthrough](demo/walkthrough.md): the recorded demo, step by step, with the synthetic webhook and how to record it again.
 
 ## Reference
 

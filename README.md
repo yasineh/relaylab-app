@@ -31,6 +31,7 @@ again.
 | Database schema (ERD) | [Database schema](docs/architecture/erd.md), checked against the migrations by a test |
 | Automated tests | Go, web, auth service, and browser end-to-end suites: see [Testing](docs/development/testing.md) |
 | CI/CD | [CI workflow](docs/ci.md) (started manually) and a [deploy workflow](docs/deployment.md#deploy-workflow) that has not been run |
+| Release review | Pre-deploy readiness review done with no open critical or high findings; the review on a deployed environment is pending. See the [verification report](docs/release/verification-report.md) |
 | Demo recording | [Above](#demo), also in the repository as [`docs/demo/relaylab-demo.webm`](docs/demo/relaylab-demo.webm) (WebM, 1080p). The [walkthrough](docs/demo/walkthrough.md) lists the steps and how to record it again |
 
 ## How it works

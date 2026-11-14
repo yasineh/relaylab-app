@@ -69,7 +69,6 @@ func anchors(t *testing.T, path string, cache map[string]map[string]bool) map[st
 	return a
 }
 
-
 // Every relative link in README.md and docs/ points at an existing file and,
 // when it has one, an existing heading anchor. External links are not
 // fetched (they would make the check depend on the network).

@@ -20,7 +20,7 @@ func Limits() (string, error) {
 	cfg, err := config.Load(func(k string) string {
 		return map[string]string{
 			"APP_ENV": "production", "APP_ORIGIN": "https://relaylab.example.com",
-			"DATABASE_URL": "postgres://u:p@db.example.com/relaylab?sslmode=require",
+			"DATABASE_URL": "postgres://db.example.com/relaylab?sslmode=require",
 		}[k]
 	})
 	if err != nil {

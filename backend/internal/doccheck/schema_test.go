@@ -112,13 +112,13 @@ func TestAuthDBERDMatchesSchema(t *testing.T) {
 			t.Errorf("erDiagram has no entity %s", entity)
 			continue
 		}
-		body := regexp.MustCompile(`(?s)\n  `+regexp.QuoteMeta(entity)+` \{\n(.*?)\n  \}`).FindStringSubmatch(diagram[1])
+		body := regexp.MustCompile(`(?s)\n  ` + regexp.QuoteMeta(entity) + ` \{\n(.*?)\n  \}`).FindStringSubmatch(diagram[1])
 		if body == nil {
 			t.Errorf("erDiagram has no attribute block for %s", entity)
 			continue
 		}
 		for _, c := range tb.Columns {
-			if !regexp.MustCompile(`(?m)^\s+\S+ "?`+regexp.QuoteMeta(c.Name)+`"?\b`).MatchString(body[1]) {
+			if !regexp.MustCompile(`(?m)^\s+\S+ "?` + regexp.QuoteMeta(c.Name) + `"?\b`).MatchString(body[1]) {
 				t.Errorf("erDiagram entity %s lacks column %s", entity, c.Name)
 			}
 		}

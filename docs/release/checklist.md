@@ -1,8 +1,7 @@
 # Release checklist
 
 A reusable checklist for releasing RelayLab. It covers the final hardening
-review (claude.md M6.8) and the portfolio release definition of done
-(§13.2). Each line is tagged:
+review and the release definition of done. Each line is tagged:
 
 - **readiness:** checked on the production-mode local stack
   (`docker-compose.prod.yml`) before any deployment.
@@ -20,10 +19,10 @@ The latest results are in the [verification report](verification-report.md).
 | Low | Hardening, a wrong status code, or documentation drift | Fix or list as a known limitation |
 
 Fix small critical and high findings in the release change. A finding that
-needs a new capability gets its own OpenSpec change, and the release waits
+needs a new capability is planned as its own change, and the release waits
 for it.
 
-## M6.8 final hardening review
+## Final hardening review
 
 | # | Item | Phase | How |
 |---|---|---|---|
@@ -48,7 +47,7 @@ for it.
 | 19 | `TRUSTED_PROXY_CIDRS` set so per-IP limits use the client address behind Cloud Run's front end | deployed | [first deployment checks](../deployment.md#first-deployment-checks) |
 | 20 | The ingestion `408` as seen through the deployed front end | deployed | stalled-body request |
 
-## §13.2 portfolio release definition of done
+## Release definition of done
 
 | Item | Phase |
 |---|---|

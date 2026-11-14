@@ -2,9 +2,8 @@
 
 How RelayLab signs people in, how the Go API decides who is calling, and the
 controls around it. This describes the implementation shipped by
-`add-user-auth`: Better Auth, pinned to an exact version, now **1.7.23**
-(`update-dependencies-and-license` moved it from 1.7.18 after confirming the
-auth tables it creates are unchanged).
+Better Auth, pinned to an exact version, now **1.7.23** (moved from 1.7.18
+after confirming the auth tables it creates are unchanged).
 
 ## Components and trust boundaries
 
@@ -154,7 +153,8 @@ Throttled requests get `429` with `Retry-After`: Better Auth sends `X-Retry-Afte
 
 Rate-limit rows (`auth."rateLimit"`) are the only place an IP address is
 stored. They are keyed `<ip>|<path>` and hold a counter and a timestamp.
-Pruning old rows (by the auth service, which owns the schema) is planned in `add-event-retention`.
+The auth service, which owns the schema, deletes rows whose window has passed
+every 10 minutes (`auth/src/retention.ts`).
 
 ## Demo users
 

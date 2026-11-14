@@ -12,7 +12,7 @@ Prepare Google Cloud Run: one app service (Go API with the auth service as a loc
 
 ## Consequences
 
-- Everything is verified locally (manifests, images, a production-mode stack); the first deploy is `deploy-public-demo`.
+- Everything is verified locally (manifests, images, a production-mode stack); the first deployment follows the [deployment runbook](../deployment.md).
 - Implementation: two migration jobs (auth, then app), because they need different images.
 
 ## See also

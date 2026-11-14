@@ -4,8 +4,7 @@
 > cloud project yet. Everything on this page has been prepared and checked
 > locally (manifests, images, the deploy workflow's dry run, and a
 > production-mode stack), but nothing has been provisioned or run in the
-> cloud. The `deploy-public-demo` change performs the first deployment by
-> following the steps below.
+> cloud. The first deployment follows the steps below.
 
 Target: Google Cloud Run on the default `*.run.app` domain, with Neon
 Postgres (Cloud SQL works the same way through standard connection URLs).
@@ -161,7 +160,7 @@ the new one passes its health check.
 Deploy → Run workflow); a test asserts that no push, pull request, or
 schedule can start it. It has never been run.
 
-**One-time setup** (part of `deploy-public-demo`):
+**One-time setup** (before the first deployment):
 
 1. GCP project with Cloud Run, Artifact Registry, Secret Manager, IAM
    Credentials, and Cloud Monitoring APIs enabled; an Artifact Registry
@@ -253,7 +252,7 @@ sign-up refused, no debug routes, and that no secret reaches any log.
 
 ## First deployment checks
 
-Things that can only be confirmed on Cloud Run, for `deploy-public-demo`:
+Things that can only be confirmed on Cloud Run, at the first deployment:
 
 - **Client addresses.** Confirm what peer address the api sees behind
   Cloud Run's front end and set `TRUSTED_PROXY_CIDRS` so that per-IP rate

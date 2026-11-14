@@ -1,6 +1,6 @@
 # Decision records
 
-Architecture and product decisions D1–D20 from the [MVP plan](../plan/mvp-plan.md), one record each: the context, the decision, its consequences, and its status. Later changes that amended a decision are noted in its record.
+Architecture and product decisions D1–D20, made while planning and building RelayLab, one record each: the context, the decision, its consequences, and its status. Later changes that amended a decision are noted in its record.
 
 | Record | Decision | Status |
 |---|---|---|

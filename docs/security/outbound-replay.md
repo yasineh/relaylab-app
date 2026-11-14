@@ -8,8 +8,8 @@ internal services, or RelayLab itself.
 Every user-directed outbound request goes through one guarded client,
 `backend/internal/replay/outbound`, in the worker. An architecture test fails
 if any other package under `internal/replay` builds an HTTP client or dials.
-Replay jobs, the API, and the UI ship with `add-event-replay` (see
-[Replay](#replay) below); URL replay runs only while the guard is active.
+Replay jobs, the API, and the UI are described under [Replay](#replay) below;
+URL replay runs only while the guard is active.
 
 ## How a request is checked
 
@@ -102,7 +102,7 @@ is the guard active. The worker's `/readyz` reports
 `"outbound_guard":"active"` or `"inactive"`. An inactive guard sends nothing:
 every request fails with `guard_inactive`, and an error is logged.
 
-## Coverage of the brief (claude.md §8.2)
+## Coverage of the SSRF requirements
 
 Test names are Go tests in `backend/internal/replay/outbound` (and
 `backend/internal/platform/config` for configuration).
@@ -216,5 +216,5 @@ Tests: `TestTestAllowlistRefusedInProduction`, `TestTestAllowlistParsing`,
   restrict the worker's network egress (for example, a VPC firewall that denies
   private ranges and the metadata server), so a future bug in the guard isn't
   the only barrier.
-- **Not covered here**: replay jobs, retries, and the UI. `add-event-replay`
-  adds them, along with user-supplied header encryption and per-project limits.
+- **Elsewhere**: replay jobs, retries, the UI, user-supplied header
+  encryption, and per-project limits are described under [Replay](#replay).

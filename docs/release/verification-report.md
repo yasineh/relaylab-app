@@ -5,7 +5,7 @@ RelayLab is **not** declared portfolio-ready. The public demo is not
 deployed, by the owner's decision, so the deployment-only items below are
 marked "pending deployment". There are no open critical or high findings.
 
-- **Review:** `release-hardening-review`, phase 1 (readiness), 2026-11-14.
+- **Review:** phase 1 (readiness), 2026-11-14.
 - **Code reviewed:** commit `1c3981f`, the readiness fixes on top of `main`
   at `f160cbf`.
 - **Stack:** the production-mode local stack, `docker-compose.prod.yml`.
@@ -15,7 +15,7 @@ marked "pending deployment". There are no open critical or high findings.
 
 | | |
 |---|---|
-| Public demo URL | Not deployed (deferred by owner decision; `deploy-public-demo` is waiting for the owner's go-ahead) |
+| Public demo URL | Not deployed (deferred by owner decision) |
 | Landing page URL | None yet. Verified locally at `https://localhost:8443/` |
 | Readiness evidence | [Readiness review log](evidence/readiness-2026-11-14.log): 101 checks passed, 0 failed. `scripts/prod-smoke.sh`: 12 of 12 passed |
 | Deployment verification | Pending deployment. No deployment has been made |

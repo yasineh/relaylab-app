@@ -1,6 +1,6 @@
 # Dependency, license, and personal-data review
 
-Done on 2026-11-14 by `update-dependencies-and-license`, before the
+Done on 2026-11-14, before the
 repository is made public. Results were recorded against the change's
 working tree, on top of commit `cedd86c`.
 
@@ -59,8 +59,7 @@ its reason:
   - No local machine path or public IP address appears.
   - The README and the archived CI design name the repository's GitHub
     owner, as its URL does.
-  - Links to the owner's private Notion workspace were removed from the
-    [MVP plan](../plan/mvp-plan.md).
+  - Links to the owner's private Notion workspace were removed.
 - **Media:** the demo video's metadata names only its encoder. The
   screenshots and SVGs carry no EXIF, XMP, or editor metadata.
 - **History:** no commit's content ever contained a personal email address

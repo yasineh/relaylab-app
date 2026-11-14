@@ -5,7 +5,7 @@ import { PASSWORD } from '../fixtures/env.ts'
 import { verificationLink } from '../fixtures/mail.ts'
 
 /**
- * The critical journey (claude.md M6.5): sign up with email verification,
+ * The critical journey: sign up with email verification,
  * create a project and endpoints, receive a webhook live, inspect it, and
  * replay it to the test sink and to the controlled echo destination.
  */

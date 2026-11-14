@@ -33,5 +33,4 @@
 
 ## Background
 
-- [MVP plan](plan/mvp-plan.md): the original plan and decisions table.
 - [Brand and design system](design/design-system.md)

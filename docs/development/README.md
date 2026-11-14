@@ -343,6 +343,5 @@ e2e/                                Playwright end-to-end suite and its echo des
 deploy/                             roles.sql, local Postgres init, the production-mode stack's
                                     configs, Cloud Run manifests, monitoring templates
 scripts/                            prod-smoke.sh, check-mermaid.sh
-openspec/                           specifications and planned changes
 docs/                               documentation
 ```

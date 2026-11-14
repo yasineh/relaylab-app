@@ -10,7 +10,7 @@ import (
 )
 
 // TestSecurityDocLinksExistingTests: docs/security/outbound-replay.md maps
-// each brief item (claude.md §8.2, 1-23) to tests. Every item must name at
+// each SSRF requirement (1-23) to tests. Every item must name at
 // least one test, and every named test must exist.
 func TestSecurityDocLinksExistingTests(t *testing.T) {
 	doc, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "docs", "security", "outbound-replay.md"))
@@ -48,7 +48,7 @@ func TestSecurityDocLinksExistingTests(t *testing.T) {
 	}
 	for i := 1; i <= 23; i++ {
 		if !seen[i] {
-			t.Errorf("brief item %d is missing from the coverage table", i)
+			t.Errorf("SSRF requirement %d is missing from the coverage table", i)
 		}
 	}
 }

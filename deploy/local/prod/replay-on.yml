@@ -1,0 +1,12 @@
+# Compose override for the release readiness review (release-hardening-review
+# task 2.3): turns URL replay on for the production-mode local stack, so the
+# SSRF protections can be exercised on the real replay path.
+#
+#   docker compose -f docker-compose.prod.yml -f deploy/local/prod/replay-on.yml up -d --wait
+services:
+  api:
+    environment:
+      REPLAY_ENABLED: "true"
+  worker:
+    environment:
+      REPLAY_ENABLED: "true"

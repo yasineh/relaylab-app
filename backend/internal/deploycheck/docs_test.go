@@ -29,7 +29,7 @@ func TestDeploymentDocIsHonest(t *testing.T) {
 		t.Errorf("secret-like value %q", m)
 	}
 	for _, section := range []string{"## Topology", "## Configuration", "### Secrets", "## Database", "### Neon", "### Cloud SQL",
-		"## Migrations", "## Deploy workflow", "## Rollback", "## Monitoring"} {
+		"## Migrations", "## Deploying", "## Rollback", "## Monitoring"} {
 		if !strings.Contains(doc, section) {
 			t.Errorf("missing section %q", section)
 		}

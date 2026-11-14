@@ -8,7 +8,7 @@ misconfigurations:
     statement: >-
       Cloud Run does not apply Kubernetes security contexts. The job images
       run as non-root users set in their Dockerfiles (distroless nonroot and
-      node), which CI's "Non-root users" step checks.
+      node).
   - id: DS-0002
     paths:
       - deploy/local/images/postgres.Dockerfile

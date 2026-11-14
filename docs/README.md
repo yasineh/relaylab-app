@@ -25,8 +25,8 @@
 
 - [Development guide](development/README.md): prerequisites, setup, configuration, migrations, running everything, and Docker.
 - [Testing](development/testing.md): unit, integration, and end-to-end suites.
-- [Continuous integration](ci.md)
-- [Deployment](deployment.md): Cloud Run and Neon or Cloud SQL, secrets, migrations, the deploy workflow, rollback, and monitoring. Not deployed yet.
+- [Checks before merging](ci.md): the commands that gate every change
+- [Deployment](deployment.md): Cloud Run and Neon or Cloud SQL, secrets, migrations, the deploy script, rollback, and monitoring. Not deployed yet.
 - [Release verification report](release/verification-report.md): the readiness review's results, findings, and M6 exit criteria. Deployed review pending.
 - [Release checklist](release/checklist.md): the release review items and severity rules.
 - [Dependency, license, and personal-data review](release/dependency-review.md): vulnerability scans, accepted findings, licenses, and the personal-data sweep before going public.

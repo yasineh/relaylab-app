@@ -2,7 +2,7 @@
 
 > **Status: RelayLab is not deployed.** There is no public demo URL and no
 > cloud project yet. Everything on this page has been prepared and checked
-> locally (manifests, images, the deploy workflow's dry run, and a
+> locally (manifests, images, the deploy script's dry run, and a
 > production-mode stack), but nothing has been provisioned or run in the
 > cloud. The first deployment follows the steps below.
 
@@ -36,7 +36,7 @@ flowchart LR
   jobs -->|migrations| direct
   worker -->|replays: public HTTPS only| dest["Replay destinations"]
   secrets["Secret Manager"] -.-> app & worker & jobs
-  gha["GitHub Actions deploy workflow<br/>(Workload Identity Federation)"] -.->|images, rollout| run
+  op["Operator: deploy/deploy.sh<br/>(gcloud)"] -.->|images, rollout| run
 ```
 
 - **One origin.** The api container serves the web app, the dashboard API,
@@ -60,13 +60,12 @@ Definitions: `deploy/cloudrun/` (`app.yaml`, `worker.yaml`,
 ### Deploy-time variables
 
 `deploy/render.sh <out-dir>` substitutes these into the manifests. None is a
-secret. The deploy workflow reads them from the GitHub `production`
-environment's variables.
+secret. `deploy/deploy.sh` reads them from the environment.
 
 | Variable | Example | Purpose |
 |---|---|---|
-| `REGION` (`GCP_REGION` in GitHub) | `europe-north1` | Cloud Run region |
-| `IMAGE_APP`, `IMAGE_AUTH` | `…/relaylab/app@sha256:…` | Image digests; the workflow sets them after pushing |
+| `REGION` | `europe-north1` | Cloud Run region |
+| `IMAGE_APP`, `IMAGE_AUTH` | `…/relaylab/app@sha256:…` | Image digests; the deploy script sets them after pushing |
 | `APP_ORIGIN` | `https://relaylab-app-xxxx.a.run.app` | The public origin (also the ingestion base URL) |
 | `APP_SERVICE_ACCOUNT`, `WORKER_SERVICE_ACCOUNT`, `MIGRATE_SERVICE_ACCOUNT` | `relaylab-app@<project>.iam.gserviceaccount.com` | Runtime identities |
 | `TRUSTED_PROXY_CIDRS` | (see [First deployment checks](#first-deployment-checks)) | Which peers may set `X-Forwarded-For` |
@@ -147,49 +146,42 @@ the same.
 
 ## Migrations
 
-The deploy workflow runs `relaylab-migrate-auth` (Better Auth, as
+The deploy script runs `relaylab-migrate-auth` (Better Auth, as
 `auth_migrator`), then `relaylab-migrate-app` (goose, as `app_migrator`), and
 waits for each. Both are idempotent. Migrations are forward-only and must be
 backwards-compatible with the running revision (expand, deploy, then
 contract in a later release), because the old revision serves traffic until
 the new one passes its health check.
 
-## Deploy workflow
+## Deploying
 
-`.github/workflows/deploy.yml` runs only when started by hand (Actions →
-Deploy → Run workflow); a test asserts that no push, pull request, or
-schedule can start it. It has never been run.
+`deploy/deploy.sh` deploys from an operator's machine, signed in with
+`gcloud`. It has never been run against a cloud project.
 
 **One-time setup** (before the first deployment):
 
-1. GCP project with Cloud Run, Artifact Registry, Secret Manager, IAM
-   Credentials, and Cloud Monitoring APIs enabled; an Artifact Registry
-   Docker repository.
-2. Service accounts: app, worker, and migrate (runtime, secret access only),
-   and a deploy account with `roles/run.admin`,
+1. GCP project with Cloud Run, Artifact Registry, Secret Manager, and Cloud
+   Monitoring APIs enabled; an Artifact Registry Docker repository.
+2. Service accounts: app, worker, and migrate (runtime, secret access only).
+   The operator who deploys needs `roles/run.admin`,
    `roles/artifactregistry.writer`, and `roles/iam.serviceAccountUser` on the
-   runtime accounts.
-3. Workload Identity Federation: a pool and GitHub OIDC provider restricted
-   to this repository, allowed to impersonate the deploy account. No service
-   account keys are created.
-4. A GitHub environment named `production` with required reviewers, and the
-   variables from the table above plus `GCP_PROJECT`, `ARTIFACT_REGISTRY`,
-   `GCP_WORKLOAD_IDENTITY_PROVIDER`, and `GCP_DEPLOY_SERVICE_ACCOUNT`.
+   runtime accounts. No service account keys are created.
+3. The variables from the table above exported in the shell, plus
+   `GCP_PROJECT` and `ARTIFACT_REGISTRY`
+   (`<region>-docker.pkg.dev/<project>/relaylab`).
 
-**A run** (inputs `ref`, `dry_run`):
+**A deployment**, from a clean checkout of the commit to deploy, after
+[the checks](ci.md) pass on it:
 
-1. Stops unless a CI run on that exact commit succeeded.
-2. Validates the manifests offline and builds both images.
-3. With `dry_run` (the default), stops here: nothing is pushed or deployed
-   and no cloud API is called.
-4. Otherwise: pushes the images and deploys them by digest, runs both
-   migration jobs, deploys the worker, deploys the app as a new revision with
-   **no traffic** under a `sha-<commit>` tag, checks `/healthz` and `/readyz`
-   on the tag URL, and only then moves all traffic to it. If any step fails,
-   traffic stays on the previous revision.
+1. `deploy/deploy.sh` (a dry run) validates the manifests offline and builds
+   both images. Nothing is pushed and no cloud API is called.
+2. `deploy/deploy.sh --deploy` also pushes the images and deploys them by
+   digest, runs both migration jobs, deploys the worker, deploys the app as a
+   new revision with **no traffic** under a `sha-<commit>` tag, checks
+   `/healthz` and `/readyz` on the tag URL, and only then moves all traffic to
+   it. If any step fails, traffic stays on the previous revision.
 
-The same checks run locally: `pnpm deploy:check` (manifest validation and
-actionlint).
+`pnpm deploy:check` runs the offline manifest validation alone.
 
 ## Rollback
 

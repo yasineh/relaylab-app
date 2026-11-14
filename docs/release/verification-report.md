@@ -19,7 +19,7 @@ marked "pending deployment". There are no open critical or high findings.
 | Landing page URL | None yet. Verified locally at `https://localhost:8443/` |
 | Readiness evidence | [Readiness review log](evidence/readiness-2026-11-14.log): 101 checks passed, 0 failed. `scripts/prod-smoke.sh`: 12 of 12 passed |
 | Deployment verification | Pending deployment. No deployment has been made |
-| CI/CD workflows | [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) and [`deploy.yml`](../../.github/workflows/deploy.yml), see [CI](../ci.md) and [Deployment](../deployment.md). Neither was run for this review: the owner's GitHub Actions minutes are exhausted, so every check below was run locally |
+| Checks and deployment | [Checks before merging](../ci.md) and the [deploy script](../deployment.md#deploying). Every check below was run locally |
 
 ## Documentation, diagrams, and recording
 
@@ -69,8 +69,8 @@ All runs are local, on 2026-11-14, against the code of commit `1c3981f`.
 
 - Not deployed. The live HTTPS, cloud IAM and secrets, live monitoring, and
   fresh-browser public demo checks have not been done.
-- CI has not run this review's commits (no Actions minutes), so there is no
-  CI run link.
+- The public repository ships no hosted CI configuration. All results come
+  from local runs of the documented checks.
 - Redirect handling, DNS rebinding, and response caps are proven by package
   tests with controlled servers, not on the live replay path, because that
   would need an external redirecting or rebinding host.
@@ -94,10 +94,10 @@ All runs are local, on 2026-11-14, against the code of commit `1c3981f`.
 - [x] Product and developer documentation complete: [documentation index](../README.md).
 - [x] Architecture diagram matches the implementation: [overview](../architecture/overview.md).
 - [x] ERD matches the migrations: [ERD](../architecture/erd.md), checked by a test.
-- [x] Backend automated tests implemented and run in CI. *Passed locally; the CI job is defined in `ci.yml`, but there is no run for this review.*
-- [x] Frontend automated tests implemented and run in CI. *As above.*
+- [x] Backend automated tests implemented. *Passed locally; run by `pnpm check`.*
+- [x] Frontend automated tests implemented. *As above.*
 - [x] Critical end-to-end workflow tested: 22 of 22.
-- [ ] CI/CD pipeline operational. *Defined and linted, not run for this review.*
+- [ ] CI/CD pipeline operational. *The repository ships local checks and a deploy script, not a hosted pipeline.*
 - [ ] At least one successful deployment through the pipeline. *Pending deployment.*
 - [x] Short product demo recording: [README](../../README.md#demo).
 - [x] No unresolved critical or high security risk, as of this readiness review.

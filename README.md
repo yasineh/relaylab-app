@@ -30,7 +30,7 @@ again.
 | Architecture diagram | [Architecture overview](docs/architecture/overview.md) |
 | Database schema (ERD) | [Database schema](docs/architecture/erd.md), checked against the migrations by a test |
 | Automated tests | Go, web, auth service, and browser end-to-end suites: see [Testing](docs/development/testing.md) |
-| CI/CD | [CI workflow](docs/ci.md) (started manually) and a [deploy workflow](docs/deployment.md#deploy-workflow) that has not been run |
+| Checks and deployment | [Checks before merging](docs/ci.md) (local commands) and a [deploy script](docs/deployment.md#deploying) that has not been run against a cloud project |
 | Release review | Pre-deploy readiness review done with no open critical or high findings; the review on a deployed environment is pending. See the [verification report](docs/release/verification-report.md) |
 | Demo recording | [Above](#demo), also in the repository as [`docs/demo/relaylab-demo.webm`](docs/demo/relaylab-demo.webm) (WebM, 1080p). The [walkthrough](docs/demo/walkthrough.md) lists the steps and how to record it again |
 
@@ -71,7 +71,7 @@ tests, and the build; `pnpm e2e` runs the browser suite. See the
 - [Security and privacy](docs/security.md)
 - [Architecture overview](docs/architecture/overview.md), [authentication](docs/architecture/auth.md), and [database schema](docs/architecture/erd.md)
 - [Development guide](docs/development/README.md) and [testing](docs/development/testing.md)
-- [Deployment](docs/deployment.md) and [CI](docs/ci.md)
+- [Deployment](docs/deployment.md) and [checks before merging](docs/ci.md)
 - [Decision records](docs/decisions/README.md)
 - [All documentation](docs/README.md)
 

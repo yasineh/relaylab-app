@@ -37,7 +37,7 @@ for it.
 | 9 | Database indexes: event list (both orders, filtered), event detail, and replay history use indexes on 10,000 events | readiness | `scripts/release-query-plans.sh` |
 | 10 | Production configuration refuses unsafe settings and names the variable, never the value | readiness | §2.4 |
 | 11 | Database roles: runtime roles cannot create tables, read password hashes, write sessions, rewrite migration history, or read the other service's data | readiness | §2.4 |
-| 12 | Secret management: Secret Manager references, least-privilege service accounts, WIF-only deploy | deployed | `gcloud` output |
+| 12 | Secret management: Secret Manager references, least-privilege service accounts, no service account keys | deployed | `gcloud` output |
 | 13 | Monitoring, health checks, and error logging: metrics, request-ID log search, alerting, no bodies or secrets in logs | readiness (logs), deployed | `scripts/prod-smoke.sh`; Cloud Logging |
 | 14 | Accessibility and responsiveness: axe at 375 and 1280 px on 11 screens; keyboard order | readiness | `pnpm --filter @relaylab/e2e a11y-scan`; `landing.spec.ts` |
 | 15 | No development-only features or debug output: no `/debug`, no public `/metrics`, security headers including HSTS, no versioned `Server` header | readiness, deployed | §2.4 |
@@ -60,8 +60,8 @@ for it.
 | Backend tests for critical functionality and security | readiness |
 | Frontend tests for critical UI | readiness |
 | Critical end-to-end workflow automated | readiness |
-| CI runs formatting, linting, type checks, tests, and builds | readiness (workflow); a CI run |
-| CI/CD can deploy the demo, with at least one verified deployment | deployed |
+| Formatting, linting, type checks, tests, and builds run as one gate | readiness |
+| The documented deploy can deploy the demo, with at least one verified deployment | deployed |
 | A 2–4 minute recording of arrival, inspection, and replay with synthetic data | readiness |
 | README links to the demo, docs, diagrams, ERD, and recording | readiness, deployed |
 | No unresolved critical or high security issue | readiness, deployed |

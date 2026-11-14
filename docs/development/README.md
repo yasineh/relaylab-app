@@ -126,7 +126,7 @@ If a port is taken on your machine, change it in `.env`:
 | `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
 | `pnpm docs:generate` | Regenerate the generated blocks in the ERD and the security doc (needs the test database; tests fail when they are stale) |
 | `scripts/check-mermaid.sh` | Render every Mermaid diagram in the docs (Docker) |
-| `pnpm deploy:check` | Validate the Cloud Run manifests offline and lint every workflow ([Deployment](../deployment.md)) |
+| `pnpm deploy:check` | Validate the Cloud Run manifests offline ([Deployment](../deployment.md)) |
 | `pnpm secrets:scan` | gitleaks over the working tree |
 
 Package-level scripts also work, for example
@@ -295,8 +295,7 @@ by the scripts, database tests fail instead of skipping.
 | Auth contract (`pnpm test:contract`) | The real auth service behind the real Go proxy and validator: valid, signed-out, revoked, expired, tampered, and unverified sessions; rate limiting and enumeration through the proxy |
 
 The contract tests need Node.js and `pnpm install`. They skip without them,
-unless `RELAYLAB_REQUIRE_AUTH=1` (set by `pnpm test:contract` and the CI
-`auth-contract` job).
+unless `RELAYLAB_REQUIRE_AUTH=1` (set by `pnpm test:contract`).
 
 The browser end-to-end suite (`pnpm e2e`) runs against a separate Docker
 Compose stack; see [Testing](testing.md).

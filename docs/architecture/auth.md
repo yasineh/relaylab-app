@@ -191,7 +191,7 @@ command is idempotent and, after Better Auth's own migrations, applies:
 It then checks that no schema change is still pending.
 
 **Upgrading Better Auth**: change the exact version in `auth/package.json` and
-`web/package.json` in a pull request, then run CI. The `auth-contract` job runs
+`web/package.json`, then run `pnpm test:contract`. It runs
 the real auth service behind the real Go proxy and validator, and fails if the
 cookie or table format changed.
 

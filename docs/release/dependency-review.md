@@ -14,7 +14,6 @@ working tree, on top of commit `cedd86c`.
 | Auth image (`auth/Dockerfile`) | Trivy, vulnerabilities and secrets | None |
 | Local-stack images | Trivy | PostgreSQL, PgBouncer, certificate generator: none. Caddy and Mailpit: findings in their upstream binaries, below |
 | Dockerfiles, compose files, Cloud Run manifests | Trivy config | None after the reviewed exceptions in `.trivyignore.yaml` |
-| Workflows | actionlint | None |
 | Secrets, working tree | gitleaks | None |
 | Secrets, all 193 commits | gitleaks | None |
 | Production dependency licenses | `pnpm licenses`, go-licenses | MIT, ISC, Apache-2.0, BSD-3-Clause, MIT-0: all permissive |
@@ -29,7 +28,6 @@ working tree, on top of commit `cedd86c`.
   - The app and echo images use distroless Debian 13. Debian 12 carried `ca-certificates` and `tzdata` advisories.
   - The auth image applies Alpine updates; the base image's zlib had CVE-2026-4738.
   - The local stacks build their PostgreSQL, PgBouncer (1.26.1), Caddy (2.11), Mailpit (1.33), and certificate-generator images from [`deploy/local/images/`](../../deploy/local/images/README.md). Each applies Alpine updates and runs as non-root, except PostgreSQL's entrypoint, which needs root to prepare its data directory before switching to the `postgres` user. PostgreSQL uses su-exec in place of gosu, a Go binary built by upstream with an old Go release.
-- **CI:** its throwaway PostgreSQL service is pinned by digest.
 
 ## Remaining findings (accepted)
 
@@ -48,7 +46,7 @@ Two misconfiguration findings are accepted in `.trivyignore.yaml`, each with
 its reason:
 
 - **The Cloud Run migration jobs have no Kubernetes security context.** Cloud
-  Run does not apply one, and the images run as non-root, which CI checks.
+  Run does not apply one, and the images run as non-root.
 - **PostgreSQL's entrypoint starts as root.**
 
 ## Personal details
@@ -57,8 +55,7 @@ its reason:
   - Every email address uses a reserved example domain (`example.com`,
     `.test`, `.localhost`).
   - No local machine path or public IP address appears.
-  - The README and the archived CI design name the repository's GitHub
-    owner, as its URL does.
+  - The README names the repository's GitHub owner, as its URL does.
   - Links to the owner's private Notion workspace were removed.
 - **Media:** the demo video's metadata names only its encoder. The
   screenshots and SVGs carry no EXIF, XMP, or editor metadata.

@@ -1,5 +1,5 @@
 # relaylab-migrate-auth: Better Auth migrations (auth_migrator). Runs first:
-# app tables reference auth."user" (D15). The deploy workflow executes it,
+# app tables reference auth."user" (D15). deploy/deploy.sh executes it,
 # then relaylab-migrate-app, and waits for each.
 # NOT DEPLOYED: see docs/deployment.md.
 apiVersion: run.googleapis.com/v1

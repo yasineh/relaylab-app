@@ -135,7 +135,5 @@ as a 1080p video against the production-mode stack. See the
 
 ### In CI
 
-The `End-to-end` job in `.github/workflows/ci.yml` runs the same commands with
-`CI=1` and counts toward `ci-success`. On failure it uploads the HTML report,
-traces, screenshots, and the stack logs as the `e2e-report` artifact. CI runs
-only when started manually (see [CI](../ci.md)).
+A CI service runs the same commands with `CI=1`, which turns off retries. See
+[Checks before merging](../ci.md).

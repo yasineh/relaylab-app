@@ -11,6 +11,10 @@ then replay it to a server you control or to a built-in test sink. It is built
 for developers integrating payment providers, Git hosts, and other services
 that send webhooks.
 
+##DEMO
+[relaylab-demo.webm](https://github.com/user-attachments/assets/13e3ad1c-13ce-42e6-8963-85acf664bf9e)
+
+
 ## Status
 
 | Deliverable | State |

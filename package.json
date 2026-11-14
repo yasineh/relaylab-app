@@ -1,6 +1,7 @@
 {
   "name": "relaylab",
   "private": true,
+  "license": "MIT",
   "description": "RelayLab: receive, inspect, replay, and debug webhooks",
   "packageManager": "pnpm@12.16.1",
   "engines": {

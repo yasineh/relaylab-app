@@ -1,6 +1,7 @@
 {
   "name": "@relaylab/e2e",
   "private": true,
+  "license": "MIT",
   "version": "0.0.0",
   "type": "module",
   "description": "End-to-end browser tests against the full Docker Compose stack (docker-compose.e2e.yml)",
@@ -18,12 +19,12 @@
     "record-demo": "node tools/record-demo.ts"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1",
+    "@playwright/test": "1.65.0",
     "@types/node": "^24.19.2",
     "@types/pg": "8.23.1",
-    "oxlint": "^1.92.0",
+    "oxlint": "^1.93.0",
     "pg": "8.23.1",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "typescript": "~7.0.2"
   }
 }

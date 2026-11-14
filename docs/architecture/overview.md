@@ -28,7 +28,7 @@ flowchart LR
   end
 
   subgraph internal["Internal: never reachable from the internet"]
-    auth["auth service<br/>Better Auth 1.7.18<br/>sessions, accounts, demo users"]
+    auth["auth service<br/>Better Auth 1.7.23<br/>sessions, accounts, demo users"]
     worker["worker<br/>replay jobs (SKIP LOCKED leases),<br/>retention purge, guard heartbeat"]
     guard["outbound guard<br/>scheme, port, host, DNS and<br/>dial-time IP checks, no redirects"]
     pg[("PostgreSQL<br/>schema auth (Better Auth)<br/>schema app (goose)")]

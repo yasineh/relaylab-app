@@ -11,10 +11,14 @@ then replay it to a server you control or to a built-in test sink. It is built
 for developers integrating payment providers, Git hosts, and other services
 that send webhooks.
 
-##DEMO
+## Demo
 
-[relaylab-demo.webm](https://github.com/user-attachments/assets/13e3ad1c-13ce-42e6-8963-85acf664bf9e)
+https://github.com/user-attachments/assets/13e3ad1c-13ce-42e6-8963-85acf664bf9e
 
+A 2 min 36 s walkthrough with synthetic data: a webhook arrives, is
+inspected, and is replayed to the test sink. The
+[walkthrough](docs/demo/walkthrough.md) lists the steps and how to record it
+again.
 
 ## Status
 
@@ -27,7 +31,7 @@ that send webhooks.
 | Database schema (ERD) | [Database schema](docs/architecture/erd.md), checked against the migrations by a test |
 | Automated tests | Go, web, auth service, and browser end-to-end suites: see [Testing](docs/development/testing.md) |
 | CI/CD | [CI workflow](docs/ci.md) (started manually) and a [deploy workflow](docs/deployment.md#deploy-workflow) that has not been run |
-| Demo recording | [Watch the 2 min 36 s demo](docs/demo/relaylab-demo.webm) (WebM, 1080p): webhook arrival, inspection, and replay. The [walkthrough](docs/demo/walkthrough.md) lists the steps and how to record it again |
+| Demo recording | [Above](#demo), also in the repository as [`docs/demo/relaylab-demo.webm`](docs/demo/relaylab-demo.webm) (WebM, 1080p). The [walkthrough](docs/demo/walkthrough.md) lists the steps and how to record it again |
 
 ## How it works
 
@@ -75,3 +79,7 @@ tests, and the build; `pnpm e2e` runs the browser suite. See the
 Go (chi, pgx, goose, sqlc, slog), PostgreSQL, Better Auth (Node), React with
 TypeScript and Vite, Tailwind CSS and shadcn/ui, TanStack Query, Playwright,
 Docker Compose, and Google Cloud Run (prepared).
+
+## License
+
+[MIT](LICENSE)

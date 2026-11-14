@@ -1,0 +1,17 @@
+# Trivy misconfiguration findings accepted after review (dependency review,
+# 2026-11-14). Each entry names the files it applies to and why.
+misconfigurations:
+  - id: KSV-0118
+    paths:
+      - deploy/cloudrun/migrate-app-job.yaml
+      - deploy/cloudrun/migrate-auth-job.yaml
+    statement: >-
+      Cloud Run does not apply Kubernetes security contexts. The job images
+      run as non-root users set in their Dockerfiles (distroless nonroot and
+      node), which CI's "Non-root users" step checks.
+  - id: DS-0002
+    paths:
+      - deploy/local/images/postgres.Dockerfile
+    statement: >-
+      Local stacks only. The official PostgreSQL entrypoint starts as root to
+      prepare the data directory and then runs the server as postgres.

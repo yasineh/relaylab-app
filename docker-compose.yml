@@ -35,7 +35,10 @@ x-auth-env: &auth-env
 
 services:
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: deploy/local/images
+      dockerfile: postgres.Dockerfile
+    image: relaylab-postgres:17-local
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -59,7 +62,10 @@ services:
   # Local SMTP server and inbox (verification and password-reset emails).
   # Inbox UI: http://localhost:${MAILPIT_UI_HOST_PORT:-8025}
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    build:
+      context: deploy/local/images
+      dockerfile: mailpit.Dockerfile
+    image: relaylab-mailpit:local
     ports:
       - "127.0.0.1:${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
       - "127.0.0.1:${MAILPIT_UI_HOST_PORT:-8025}:8025"
@@ -67,7 +73,10 @@ services:
   # One-shot: re-applies deploy/sql/roles.sql (idempotent) so role and grant
   # changes reach an existing database volume, not only a freshly created one.
   db-roles:
-    image: postgres:17-alpine
+    build:
+      context: deploy/local/images
+      dockerfile: postgres.Dockerfile
+    image: relaylab-postgres:17-local
     command: ["sh", "/docker-entrypoint-initdb.d/00_roles.sh"]
     environment:
       PGHOST: postgres
@@ -196,7 +205,10 @@ services:
   # Isolated cluster for Go and auth integration tests (`pnpm test`). Roles are
   # cluster-wide, so tests must never share a cluster with the dev database.
   postgres-test:
-    image: postgres:17-alpine
+    build:
+      context: deploy/local/images
+      dockerfile: postgres.Dockerfile
+    image: relaylab-postgres:17-local
     profiles: ["test"]
     environment:
       POSTGRES_USER: postgres

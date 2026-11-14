@@ -1,6 +1,7 @@
 {
   "name": "@relaylab/backend",
   "private": true,
+  "license": "MIT",
   "description": "RelayLab Go API and worker. These scripts wrap Go tooling so pnpm can drive the backend.",
   "scripts": {
     "dev:api": "./scripts/with-env.sh go run ./cmd/api",

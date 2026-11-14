@@ -35,14 +35,20 @@ x-auth-env: &auth-env
 
 services:
   certs:
-    image: alpine/openssl:3.5.4@sha256:42c7389ef077aed0eb4e96d0abbd094083d701bbaff1313073b061c0c9cd8278
+    build:
+      context: deploy/local/images
+      dockerfile: openssl.Dockerfile
+    image: relaylab-openssl:local
     entrypoint: ["sh", "/gen-certs.sh"]
     volumes:
       - certs:/certs
       - ./deploy/local/prod/gen-certs.sh:/gen-certs.sh:ro
 
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: deploy/local/images
+      dockerfile: postgres.Dockerfile
+    image: relaylab-postgres:17-local
     command:
       ["postgres", "-c", "ssl=on", "-c", "ssl_cert_file=/certs/server.crt", "-c", "ssl_key_file=/certs/server.key"]
     environment:
@@ -69,7 +75,10 @@ services:
         condition: service_completed_successfully
 
   pgbouncer:
-    image: edoburu/pgbouncer:v1.24.1-p1@sha256:3db3d7223e93af52b4116f642951a1a5fa44702a88c2a59cf7562cac19320c9e
+    build:
+      context: deploy/local/images
+      dockerfile: pgbouncer.Dockerfile
+    image: relaylab-pgbouncer:local
     volumes:
       - certs:/certs:ro
       - ./deploy/local/prod/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
@@ -79,7 +88,10 @@ services:
         condition: service_healthy
 
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    build:
+      context: deploy/local/images
+      dockerfile: mailpit.Dockerfile
+    image: relaylab-mailpit:local
 
   auth-migrate:
     build:
@@ -169,7 +181,10 @@ services:
         condition: service_started
 
   caddy:
-    image: caddy:2.10-alpine@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d
+    build:
+      context: deploy/local/images
+      dockerfile: caddy.Dockerfile
+    image: relaylab-caddy:local
     ports:
       - "127.0.0.1:${PROD_HTTPS_PORT:-8443}:8443"
     volumes:

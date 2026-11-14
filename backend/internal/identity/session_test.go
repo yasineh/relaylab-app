@@ -25,7 +25,7 @@ import (
 //nolint:gosec // G101: test-only value.
 const testSessionSecret = "test-only-better-auth-secret-0123456789abcdef"
 
-const validToken = "OSsmUnAfkn3ueRXSDK8HJVOqRyNbSGO7" // 32 chars, Better Auth 1.7.18 shape
+const validToken = "OSsmUnAfkn3ueRXSDK8HJVOqRyNbSGO7" // 32 chars, Better Auth 1.7.23 shape
 
 var testNow = time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
 

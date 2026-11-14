@@ -33,7 +33,7 @@ function schemaConfig(): Config {
 
 /** Idempotent steps that Better Auth's own migration does not cover (design decision 5). */
 const POST_STEPS = [
-  // Better Auth 1.7.18 already creates session_token_key; this only guards against a future change.
+  // Better Auth 1.7.23 already creates session_token_key; this only guards against a future change.
   'CREATE UNIQUE INDEX IF NOT EXISTS session_token_key ON auth."session" ("token")',
   // The Go API validates sessions read-only.
   'GRANT SELECT ON auth."session", auth."user" TO app_runtime',

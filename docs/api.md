@@ -644,7 +644,7 @@ serves `ingest_requests_total{outcome}`, `ingest_duration_seconds`, and
 
 ## Authentication (`/api/auth/*`)
 
-These routes are served by Better Auth 1.7.18 through the Go API's reverse
+These routes are served by Better Auth 1.7.23 through the Go API's reverse
 proxy. Request and response bodies are Better Auth's own: errors use
 `{ "code": "...", "message": "..." }`, not the envelope above, except for the
 proxy errors `502`, `504`, and `413`. Unsafe requests must carry

@@ -2,7 +2,9 @@
 
 How RelayLab signs people in, how the Go API decides who is calling, and the
 controls around it. This describes the implementation shipped by
-`add-user-auth`: Better Auth **1.7.18**, pinned to that exact version.
+`add-user-auth`: Better Auth, pinned to an exact version, now **1.7.23**
+(`update-dependencies-and-license` moved it from 1.7.18 after confirming the
+auth tables it creates are unchanged).
 
 ## Components and trust boundaries
 
@@ -182,7 +184,7 @@ the user was created, and the auth service deletes expired demo users every
 **first**, because app tables reference `auth."user"(id)`. The auth migrate
 command is idempotent and, after Better Auth's own migrations, applies:
 
-- a unique index on `auth."session"(token)` if it is missing (Better Auth 1.7.18 already creates it);
+- a unique index on `auth."session"(token)` if it is missing (Better Auth 1.7.23 already creates it);
 - `GRANT SELECT ON auth."session", auth."user" TO app_runtime`;
 - `GRANT REFERENCES ON auth."user" TO app_migrator`.
 

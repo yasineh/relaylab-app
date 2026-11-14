@@ -193,7 +193,7 @@ erDiagram
 | Schema | Owner role | Managed by | Contents today |
 |---|---|---|---|
 | `app` | `app_migrator` | goose migrations in `backend/migrations/` | `projects`, `endpoints`, `webhook_events`, `audit_log`, `replay_attempts`, `jobs`, `worker_heartbeats`, `goose_db_version` (migration bookkeeping) |
-| `auth` | `auth_migrator` | Better Auth 1.7.18 migrations (`auth/src/migrate.ts`) | `user`, `session`, `account`, `verification`, `rateLimit` |
+| `auth` | `auth_migrator` | Better Auth 1.7.23 migrations (`auth/src/migrate.ts`) | `user`, `session`, `account`, `verification`, `rateLimit` |
 
 Nothing is created in `public`; `CREATE` on `public` is revoked.
 

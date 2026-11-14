@@ -66,7 +66,10 @@ x-api: &api
 
 services:
   postgres:
-    image: postgres:17-alpine
+    build:
+      context: deploy/local/images
+      dockerfile: postgres.Dockerfile
+    image: relaylab-postgres:17-local
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: e2e-only-postgres
@@ -91,7 +94,10 @@ services:
       retries: 30
 
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    build:
+      context: deploy/local/images
+      dockerfile: mailpit.Dockerfile
+    image: relaylab-mailpit:local
     # The suite reads verification emails through Mailpit's HTTP API.
     ports:
       - "127.0.0.1:${E2E_MAILPIT_PORT:-4125}:8025"

@@ -27,6 +27,7 @@
 - [Testing](development/testing.md): unit, integration, and end-to-end suites.
 - [Continuous integration](ci.md)
 - [Deployment](deployment.md): Cloud Run and Neon or Cloud SQL, secrets, migrations, the deploy workflow, rollback, and monitoring. Not deployed yet.
+- [Dependency, license, and personal-data review](release/dependency-review.md): vulnerability scans, accepted findings, licenses, and the personal-data sweep before going public.
 
 ## Background
 

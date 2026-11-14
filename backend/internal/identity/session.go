@@ -80,7 +80,7 @@ const (
 	sigLen       = sha256.Size // HMAC-SHA256
 )
 
-// Better Auth 1.7.18 tokens are 32 alphanumeric characters; accept a slightly wider,
+// Better Auth 1.7.23 tokens are 32 alphanumeric characters; accept a slightly wider,
 // still strictly bounded alphabet so a format tweak fails the contract test, not users.
 var tokenPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
 

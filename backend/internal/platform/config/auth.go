@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Session cookie names set by the auth service (Better Auth 1.7.18 with
+// Session cookie names set by the auth service (Better Auth 1.7.23 with
 // cookiePrefix "relaylab"; confirmed by add-user-auth spike 1.1).
 const (
 	SessionCookieDev  = "relaylab.session_token"

@@ -26,9 +26,11 @@ COPY --from=deps --chown=root:root /src/auth/node_modules ./auth/node_modules
 COPY --chown=root:root auth/package.json auth/
 COPY --chown=root:root auth/src auth/src
 COPY --chown=root:root deploy/sql deploy/sql
-# The service runs with node alone: drop the package managers bundled in the
-# base image (they are never used at runtime and carry their own CVEs).
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+# Apply Alpine security updates newer than the base image (the pinned digest
+# can lag a package fix, e.g. zlib CVE-2026-4738). The service runs with node
+# alone: drop the package managers bundled in the base image (they are never
+# used at runtime and carry their own CVEs).
+RUN apk upgrade --no-cache && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
       /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
 WORKDIR /app/auth
 USER node

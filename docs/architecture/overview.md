@@ -75,7 +75,7 @@ sequenceDiagram
   I->>P: NOTIFY events (project id, event id)
   P-->>B: notification (one LISTEN connection per api instance)
   B->>P: load the summary, scoped to the stream's owner
-  B-->>W: SSE event (summary only; never body or header values)
+  B-->>W: SSE event (a summary, never body or header values)
 ```
 
 ## Replay flow

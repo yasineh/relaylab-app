@@ -5,9 +5,9 @@ inspect it, and you replay it. This page lists every step, the synthetic
 webhook, and the checks done before publishing. The recording is produced by
 a script, so anyone can make it again from a clean checkout.
 
-**Status:** recorded (2 min 36 s, 1920×1080) on the production-mode local
-stack. It is not published yet: uploading it to YouTube as an unlisted video
-is an action for the repository owner (see [Publishing](#publishing)).
+**The recording:** [`relaylab-demo.webm`](relaylab-demo.webm) (2 min 36 s,
+1920×1080, WebM), recorded on the production-mode local stack. It opens in
+Chrome, Firefox, and Edge, and in VLC; QuickTime does not play WebM.
 
 ## Record it
 
@@ -109,17 +109,13 @@ Checked against the recording of 2026-11-14, using frames sampled every
 
 ## Publishing
 
-These steps need the owner's YouTube account:
+The recording is committed as `docs/demo/relaylab-demo.webm` and linked from
+the README. To replace it, record again and copy
+`e2e/recordings/relaylab-demo.webm` over it.
 
-1. Upload `e2e/recordings/relaylab-demo.webm` to YouTube as an **unlisted**
-   video. A suggested description: "RelayLab receives a webhook, shows every
-   byte, and replays it. Recorded on the production-mode stack with
-   synthetic data."
-2. Check that the link plays in a signed-out browser window.
-3. Replace the "Demo recording" row of the README status table with the link.
-4. Set `DEMO_VIDEO_URL` to the link in the deployment configuration
-   (`deploy/cloudrun/app.yaml`, or `.env` locally). The landing page then
-   shows a "Watch the demo" link.
-
-Until then, the README marks the recording as not published and links to
-this page.
+To link it from the landing page, the video needs a public URL, for example
+an unlisted YouTube upload with the description "RelayLab receives a webhook,
+shows every byte, and replays it. Recorded on the production-mode stack with
+synthetic data." Set `DEMO_VIDEO_URL` to that URL in the deployment
+configuration (`deploy/cloudrun/app.yaml`, or `.env` locally), and the
+landing page shows a "Watch the demo" link. Until then it shows none.

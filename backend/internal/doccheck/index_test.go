@@ -35,7 +35,7 @@ func TestDocsIndexLinksEveryPage(t *testing.T) {
 		}
 	}
 	readme, _ := os.ReadFile(filepath.Join(root, "README.md"))
-	for _, want := range []string{"Not deployed yet", "(docs/README.md)", "(docs/architecture/overview.md)", "(docs/architecture/erd.md)", "not published yet", "(docs/demo/walkthrough.md)"} {
+	for _, want := range []string{"Not deployed yet", "(docs/README.md)", "(docs/architecture/overview.md)", "(docs/architecture/erd.md)", "(docs/demo/relaylab-demo.webm)", "(docs/demo/walkthrough.md)"} {
 		if !strings.Contains(string(readme), want) {
 			t.Errorf("README.md lacks %q", want)
 		}

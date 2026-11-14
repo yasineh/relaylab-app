@@ -23,4 +23,4 @@ Architecture and product decisions D1–D20 from the [MVP plan](../plan/mvp-plan
 | [D17](0017-limits.md) | All limits in one configuration module | Accepted |
 | [D18](0018-deletion.md) | Permanent deletion through database cascades | Accepted |
 | [D19](0019-repository.md) | A neutral, owner-independent repository | Accepted |
-| [D20](0020-demo-video.md) | A short demo video, linked once it exists | Accepted, not yet carried out |
+| [D20](0020-demo-video.md) | A short demo video, linked once it exists | Accepted, amended: committed to the repository |

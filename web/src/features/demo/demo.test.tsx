@@ -50,6 +50,11 @@ describe('try the demo (4.1)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Try the demo' }))
     await waitFor(() => expect(currentPath(router)).toBe(`/projects/${PID}/events`))
     expect(calls.some((c) => c.method === 'POST' && c.path === '/api/auth/sign-in/anonymous')).toBe(true)
+    // The header and banner switch to the demo user without a reload or refocus.
+    expect(await screen.findByRole('region', { name: 'Demo workspace' })).toBeInTheDocument()
+    const account = screen.getByRole('navigation', { name: 'Account' })
+    expect(within(account).getByText('Demo visitor')).toBeInTheDocument()
+    expect(within(account).queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument()
   })
 
   it('explains the per-network demo limit', async () => {

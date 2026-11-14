@@ -17,9 +17,13 @@ const RELATIVE_STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
   ['year', Infinity],
 ]
 
-/** Formats an ISO timestamp relative to `now` ("3 minutes ago") in the viewer's locale. */
+/**
+ * Formats a past ISO timestamp relative to `now` ("3 minutes ago") in the
+ * viewer's locale. A time slightly after `now` (a live event that arrived
+ * since the clock last ticked, or a small clock difference) reads "now".
+ */
 export function formatRelative(iso: string, now: Date = new Date()): string {
-  let value = (new Date(iso).getTime() - now.getTime()) / 1000
+  let value = Math.min(0, (new Date(iso).getTime() - now.getTime()) / 1000)
   for (const [unit, size] of RELATIVE_STEPS) {
     if (Math.abs(value) < size) {
       return new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' }).format(Math.round(value), unit)

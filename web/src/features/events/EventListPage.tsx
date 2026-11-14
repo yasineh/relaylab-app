@@ -1,5 +1,4 @@
 import { ArrowUp, Inbox, Loader2, SearchX } from 'lucide-react'
-import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
 import { CopyButton } from '@/components/copy-button'
@@ -23,6 +22,7 @@ import { formatBytes } from '@/features/events/payload/bytes'
 import { VisibleText } from '@/features/events/payload/RawText'
 import { useCurrentProject } from '@/features/projects/ProjectLayout'
 import { isApiError } from '@/lib/api'
+import { useNow } from '@/hooks/now'
 import { formatPreciseDateTime, formatRelative } from '@/lib/format'
 
 export function EventListPage() {
@@ -215,8 +215,7 @@ function NoEvents({ projectId, endpoints }: { projectId: string; endpoints: Endp
 }
 
 function EventTable({ projectId, events }: { projectId: string; events: EventSummary[] }) {
-  // Relative times are computed against the moment the table mounted.
-  const [now] = useState(() => new Date())
+  const now = useNow()
   return (
     <div className="overflow-x-auto rounded-lg border bg-card">
       <table className="w-full text-sm">

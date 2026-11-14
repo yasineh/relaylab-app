@@ -37,6 +37,11 @@ export function usePublicConfig() {
 
 /** Drops everything cached for the current user (after sign-in, sign-out, or account changes). */
 export async function resetUserData(client: QueryClient): Promise<void> {
-  client.removeQueries({ predicate: (q) => q.queryKey[0] !== configQueryKey[0] })
+  // Keep the `me` query itself: mounted observers (the header, the demo
+  // banner) stay subscribed to it, so removing it would leave them showing
+  // the previous user until a refocus. Refetch it in place instead.
+  client.removeQueries({
+    predicate: (q) => q.queryKey[0] !== configQueryKey[0] && q.queryKey[0] !== meQueryKey[0],
+  })
   await client.invalidateQueries({ queryKey: meQueryKey })
 }

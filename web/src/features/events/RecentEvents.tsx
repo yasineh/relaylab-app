@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Inbox, Loader2 } from 'lucide-react'
-import { useState } from 'react'
 import { Link } from 'react-router'
 
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -10,6 +9,7 @@ import { useEventStream, useLiveInsert } from '@/features/events/live'
 import { MethodBadge } from '@/features/events/MethodBadge'
 import { VisibleText } from '@/features/events/payload/RawText'
 import { isApiError } from '@/lib/api'
+import { useNow } from '@/hooks/now'
 import { formatPreciseDateTime, formatRelative } from '@/lib/format'
 
 /** How many events the overview card lists. */
@@ -22,7 +22,7 @@ const ALL: EventFilters = {}
 export function RecentEvents({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient()
   const events = useEvents(projectId, ALL)
-  const [now] = useState(() => new Date())
+  const now = useNow()
   const insert = useLiveInsert(projectId, ALL)
   const state = useEventStream(projectId, {
     // A small card has no scroll position to protect: always insert.

@@ -5,16 +5,38 @@
   </picture>
 </h1>
 
-A developer workspace to receive, inspect, replay, and debug HTTP webhooks.
+RelayLab gives you a URL that records every HTTP request sent to it. Inspect
+the exact method, headers, query, and body of each webhook as it arrives,
+then replay it to a server you control or to a built-in test sink. It is built
+for developers integrating payment providers, Git hosts, and other services
+that send webhooks.
 
-> **Status: early development.** The platform foundation and accounts are in
-> place: Go API and worker, PostgreSQL with migrations, health checks,
-> structured logging, and email/password accounts (sign-up, email verification,
-> sign-in, password reset, account settings) through a Better Auth service, and
-> user-owned projects, webhook endpoints with secret receiving URLs, public
-> webhook ingestion, and the event explorer (filtered, paginated event list and
-> event detail with JSON, raw, and hex views). Live updates and replay are
-> planned and specified but **not implemented yet**. RelayLab is not deployed anywhere.
+## Status
+
+| Deliverable | State |
+|---|---|
+| Public demo | Not deployed yet. Deployment is prepared and checked locally: see the [deployment runbook](docs/deployment.md) |
+| Product | Accounts, projects, endpoints, ingestion, the event explorer, live updates, replay with SSRF protections, retention, demo workspaces, and the landing page are built and tested |
+| Documentation | [Documentation index](docs/README.md) |
+| Architecture diagram | [Architecture overview](docs/architecture/overview.md) |
+| Database schema (ERD) | [Database schema](docs/architecture/erd.md), checked against the migrations by a test |
+| Automated tests | Go, web, auth service, and browser end-to-end suites: see [Testing](docs/development/testing.md) |
+| CI/CD | [CI workflow](docs/ci.md) (started manually) and a [deploy workflow](docs/deployment.md#deploy-workflow) that has not been run |
+| Demo recording | Pending: not recorded yet |
+
+## How it works
+
+1. **Receive.** Create an endpoint and point a provider, or curl, at its URL.
+   Each request is stored before RelayLab answers, with credential values
+   such as `Authorization` removed on arrival.
+2. **Inspect.** Requests appear live. Open one to read its body as a JSON
+   tree, text, or hex, with every header and query parameter, and copy it as
+   curl.
+3. **Replay.** Send it again to an HTTPS URL you control, through a guard
+   that only reaches public addresses, or to a test sink inside RelayLab, and
+   read the response.
+
+Start with [Getting started](docs/guide/getting-started.md).
 
 ## Run it locally
 
@@ -26,29 +48,25 @@ pnpm install
 pnpm dev        # Postgres + Mailpit + migrations, then web, API, worker, and auth
 ```
 
-Open <http://localhost:5173> and create an account at `/sign-up`; the
-verification email arrives in Mailpit at <http://localhost:8025>. `pnpm test`, `pnpm lint`, and `pnpm build` also
-run from the root. See the [development guide](docs/development/README.md) for all
-commands, configuration, and the Docker-only workflow (`pnpm dev:docker`).
+Open <http://localhost:5173>, choose **Try the demo** or create an account
+(the verification email arrives in Mailpit at <http://localhost:8025>).
+`pnpm check` runs formatting, linting, type checks, all unit and integration
+tests, and the build; `pnpm e2e` runs the browser suite. See the
+[development guide](docs/development/README.md) for everything else.
 
 ## Documentation
 
-- [Development guide](docs/development/README.md)
-- [Testing](docs/development/testing.md) (unit, integration, and end-to-end)
-- [Continuous integration](docs/ci.md)
-- [Deployment](docs/deployment.md) (prepared; not deployed yet)
-- [Architecture overview](docs/architecture/overview.md) (current implementation)
-- [Database schema](docs/architecture/erd.md)
-- [Brand and design system](docs/design/design-system.md)
+- [Getting started](docs/guide/getting-started.md) and [inspecting and replaying webhooks](docs/guide/webhook-workflow.md)
 - [API reference](docs/api.md)
-- [Authentication and sessions](docs/architecture/auth.md)
-- [Received events](docs/security/events.md)
-- [Outbound requests and SSRF protections](docs/security/outbound-replay.md)
-- [Data retention and deletion](docs/security/data-retention.md)
-- [MVP plan and decisions](docs/plan/mvp-plan.md)
-- [Specifications](openspec/): planned changes live in `openspec/changes/`
+- [Security and privacy](docs/security.md)
+- [Architecture overview](docs/architecture/overview.md), [authentication](docs/architecture/auth.md), and [database schema](docs/architecture/erd.md)
+- [Development guide](docs/development/README.md) and [testing](docs/development/testing.md)
+- [Deployment](docs/deployment.md) and [CI](docs/ci.md)
+- [Decision records](docs/decisions/README.md)
+- [All documentation](docs/README.md)
 
 ## Stack
 
-Go (chi, pgx, goose, sqlc, slog) · PostgreSQL · React + TypeScript + Vite ·
-Tailwind CSS + shadcn/ui · TanStack Query · pnpm workspace · Docker Compose.
+Go (chi, pgx, goose, sqlc, slog), PostgreSQL, Better Auth (Node), React with
+TypeScript and Vite, Tailwind CSS and shadcn/ui, TanStack Query, Playwright,
+Docker Compose, and Google Cloud Run (prepared).

@@ -28,3 +28,6 @@ backend/internal/webui/dist/
 e2e/playwright-report/
 e2e/test-results/
 e2e/recordings/
+
+# Release review evidence is committed (a global *.log rule would hide it)
+!docs/release/evidence/*.log

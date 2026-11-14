@@ -1,0 +1,26 @@
+$ node tools/a11y-scan.ts
+Created verified user YUrGoFiOIJN7GwZk5JAsx4o8Kat5ULWA.
+PASS  375px  Landing: none
+PASS  375px  Security and privacy: none
+PASS  375px  Sign in: none
+PASS  375px  Projects: none
+PASS  375px  Project overview: none
+PASS  375px  Endpoint detail: none
+PASS  375px  Event explorer: none
+PASS  375px  Event detail: none
+PASS  375px  Event headers: none
+PASS  375px  Replay history: none
+PASS  375px  Account settings: none
+PASS  1280px  Landing: none
+PASS  1280px  Security and privacy: none
+PASS  1280px  Sign in: none
+PASS  1280px  Projects: none
+PASS  1280px  Project overview: none
+PASS  1280px  Endpoint detail: none
+PASS  1280px  Event explorer: none
+PASS  1280px  Event detail: none
+PASS  1280px  Event headers: none
+PASS  1280px  Replay history: none
+PASS  1280px  Account settings: none
+
+0 serious or critical violation(s)

@@ -1,0 +1,137 @@
+# RelayLab readiness review
+Target: https://localhost:8443
+Commit: 513d4fa (with local changes)
+Date:   2026-11-14T17:19:57Z
+Created verified user iEltqe4GBqXQDVpMDjpwSbVzAsItzmEd.
+Created verified user n17p0gsbE5ziThsiOYRaGKxHCFasnHBH.
+Setup: users A and B, A's project, endpoint, sink, event, and replay created
+
+## 2.1 Authentication and authorization
+PASS  no session: GET /api/v1/projects (401)
+PASS  forged cookie: GET /api/v1/me (401)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8 (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/endpoints/01a1db12-b8b5-758d-b9e9-cc24d4978273 (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/events (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/events/01a1db12-b8e9-784a-a6b6-61a015fd5c1b (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/events/01a1db12-b8e9-784a-a6b6-61a015fd5c1b/body (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/replays/01a1db12-b907-7995-a3f7-3c4784ee25d0 (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/replays (404)
+PASS  B reads A's /projects/01a1db12-b89b-7270-b3d5-efd0b0f9ecd8/audit-log (404)
+PASS  B replays A's event (400)
+PASS  B renames A's project (404)
+PASS  B deletes A's event (404)
+PASS  B deletes A's project (404)
+PASS  A's project still exists after B's attempts (200)
+PASS  B's stream of A's project (404)
+PASS  unsafe method without Origin (403)
+      code: origin_rejected
+PASS  unsafe method from another origin (403)
+PASS  auth API from another origin (sign-out) (403)
+PASS  a signed-out session cookie is rejected (401)
+Created verified user FzU3gzel3iQ1vBVxK9nKagi4ox1EEgj9.
+
+## 2.2 Ingestion limits, redaction, and malformed input
+PASS  body of exactly 256 KiB (200)
+PASS  body of 256 KiB + 1 (413)
+PASS  101 header fields (431)
+PASS  34 KiB of headers (over LIMIT_HTTP_MAX_HEADER_BYTES) (431)
+PASS    answered by the API's limit (headers_too_large)
+PASS  40 KiB of headers (the server's hard backstop) (431)
+PASS  a body that stops arriving, at the API (Content-Length 100, 3 bytes sent) (408)
+      the same through the local Caddy proxy: 502 (finding F4)
+PASS  unsupported method TRACE (405)
+PASS  unknown endpoint token (404)
+PASS  invalid JSON is stored as sent (200)
+PASS    json_invalid recorded (t)
+PASS  non-UTF-8 body (200)
+PASS    stored byte for byte (fffe0062696e61727980 binary)
+PASS  request with credentials in headers and query (200)
+PASS  credential values found anywhere in app.webhook_events (0)
+PASS    redacted values recorded for that event (4)
+      stored query: token=%5BREDACTED%5D&page=2
+PASS  credential values found in any service's logs (0)
+      40 rapid requests to one endpoint: 30 accepted, 10 limited
+PASS  per-endpoint burst of 30 enforced
+PASS    429 carries Retry-After (1)
+
+## 2.3 SSRF protections on the replay path (REPLAY_ENABLED=true)
+PASS  URL replay enabled for this section (true)
+PASS  https://127.0.0.1/: refused at creation: 422 invalid_destination
+PASS  https://127.1/: refused at creation: 422 invalid_destination
+PASS  https://2130706433/: refused at creation: 422 invalid_destination
+PASS  https://0x7f.0.0.1/: refused at creation: 422 invalid_destination
+PASS  https://017700000001/: refused at creation: 422 invalid_destination
+PASS  https://[::1]/: refused at creation: 422 invalid_destination
+PASS  https://[::ffff:127.0.0.1]/: refused at creation: 422 invalid_destination
+PASS  https://[0:0:0:0:0:ffff:7f00:1]/: refused at creation: 422 invalid_destination
+PASS  https://10.0.0.1/: refused at creation: 422 invalid_destination
+PASS  https://172.16.0.1/: refused at creation: 422 invalid_destination
+PASS  https://192.168.1.1/: refused at creation: 422 invalid_destination
+PASS  https://100.64.0.1/: refused at creation: 422 invalid_destination
+PASS  https://[fc00::1]/: refused at creation: 422 invalid_destination
+PASS  https://169.254.169.254/latest/meta-data/: refused at creation: 422 invalid_destination
+PASS  https://[fd00:ec2::254]/: refused at creation: 422 invalid_destination
+PASS  https://metadata.google.internal/: refused at creation: 422 invalid_destination
+PASS  https://[fe80::1]/: refused at creation: 422 invalid_destination
+PASS  https://224.0.0.1/: refused at creation: 422 invalid_destination
+PASS  https://0.0.0.0/: refused at creation: 422 invalid_destination
+PASS  https://255.255.255.255/: refused at creation: 422 invalid_destination
+PASS  https://localhost/: refused at creation: 422 invalid_destination
+PASS  https://api:8080/: refused at creation: 422 invalid_destination
+PASS  https://postgres/: refused at creation: 422 invalid_destination
+PASS  https://caddy:8443/: refused at creation: 422 invalid_destination
+PASS  https://localhost.:8443/: refused at creation: 422 invalid_destination
+PASS  https://localtest.me/: accepted, then failed: blocked_address
+PASS  https://127.0.0.1.nip.io/: accepted, then failed: blocked_address
+PASS  http://example.com/: refused at creation: 422 invalid_destination
+PASS  https://example.com:22/: refused at creation: 422 invalid_destination
+PASS  https://user:pass@example.com/: refused at creation: 422 invalid_destination
+PASS  https://localhost:8443/h/x: refused at creation: 422 invalid_destination
+      Redirects, DNS rebinding, the connect-time socket check, timeouts, and response caps
+      need a controlled server; they are covered by the outbound package tests:
+      --- PASS: TestMethodsLimitedToReplayable (0.00s)
+      --- PASS: TestDefaultAcquireTimeoutIsTwoSeconds (0.00s)
+      --- PASS: TestDNSLookupTimeout (0.10s)
+      --- PASS: TestDNSRebindingDefeated (0.05s)
+      --- PASS: TestRedirectsNotFollowed (0.03s)
+      --- PASS: TestTLSHandshakeTimeout (0.20s)
+      ok  	relaylab/internal/replay/outbound	0.600s
+      ok  	relaylab/internal/replay/outbound/ippolicy	0.141s [no tests to run]
+PASS  URL replay off again (stack default) (false)
+
+## 2.4 Production profile, database roles, and debug surface
+PASS  refuses to start with REPLAY_TEST_ALLOWLIST unsafe; names the variable, not the value
+PASS  refuses to start with OUTBOUND_ALLOW_HTTP unsafe; names the variable, not the value
+PASS  refuses to start with APP_ORIGIN unsafe; names the variable, not the value
+PASS  refuses to start with ENDPOINT_TOKEN_HMAC_KEY unsafe; names the variable, not the value
+PASS  refuses to start with DATABASE_URL unsafe; names the variable, not the value
+PASS  refuses to start with RETENTION_EVENT_TTL unsafe; names the variable, not the value
+PASS  /debug/pprof/ is not served (404)
+PASS  /metrics is not public (404)
+PASS  Server header does not name versions (0)
+PASS  landing page sends Strict-Transport-Security (1)
+PASS  landing page sends Content-Security-Policy (1)
+PASS  landing page sends X-Content-Type-Options (1)
+PASS  landing page sends Referrer-Policy (1)
+PASS  app_runtime cannot create tables (1)
+PASS  app_runtime cannot read password hashes (auth.account.password) (f)
+PASS  app_runtime reads session tokens only to look sessions up (SELECT) (t)
+PASS  app_runtime cannot INSERT auth.session (f)
+PASS  app_runtime cannot UPDATE auth.session (f)
+PASS  app_runtime cannot DELETE auth.session (f)
+PASS  app_runtime reads the migration version (readiness) (t)
+PASS  app_runtime cannot INSERT migration history (app.goose_db_version) (f)
+PASS  app_runtime cannot UPDATE migration history (app.goose_db_version) (f)
+PASS  app_runtime cannot DELETE migration history (app.goose_db_version) (f)
+PASS  app_runtime cannot TRUNCATE migration history (app.goose_db_version) (f)
+PASS  auth_runtime cannot read webhook events (f)
+PASS  auth_runtime cannot create tables (1)
+
+## 2.5 Retention and demo expiry
+      /retention events (older than 7 days / all) before: 3/6
+PASS  events older than RETENTION_EVENT_TTL deleted, newer kept (old/all after) (0/3)
+      demo user/projects/events before: 1/1/8
+PASS  expired demo workspace deleted with its data (user/projects/events) (0/0/0)
+PASS  real users untouched by the demo purge (200)
+
+101 passed, 0 failed

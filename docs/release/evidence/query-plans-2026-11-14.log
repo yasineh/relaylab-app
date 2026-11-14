@@ -1,0 +1,191 @@
+# Query plans on 10,000 events
+Commit: 513d4fa  Date: 2026-11-14T17:16:23Z
+Created verified user 4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L.
+Seeded: 10000 events and 1000 replays in the review project; 20000 events in all projects
+
+## Event list, first page (ListEventsDesc)
+
+```
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.051..0.101 rows=51 loops=1)
+   Buffers: shared hit=8
+   ->  Nested Loop (actual time=0.050..0.096 rows=51 loops=1)
+         Buffers: shared hit=8
+         ->  Nested Loop (actual time=0.039..0.069 rows=51 loops=1)
+               Buffers: shared hit=6
+               ->  Index Scan using webhook_events_project_id_idx on webhook_events e (actual time=0.015..0.030 rows=51 loops=1)
+                     Index Cond: ((project_id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid) AND (id > '00000000-0000-0000-0000-000000000000'::uuid) AND (id < 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+                     Buffers: shared hit=4
+               ->  Materialize (actual time=0.001..0.001 rows=1 loops=51)
+                     Buffers: shared hit=2
+                     ->  Index Scan using projects_pkey on projects p (actual time=0.017..0.017 rows=1 loops=1)
+                           Index Cond: (id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+                           Filter: (owner_id = '4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L'::text)
+                           Buffers: shared hit=2
+         ->  Memoize (actual time=0.000..0.000 rows=1 loops=51)
+               Cache Key: e.endpoint_id
+               Cache Mode: logical
+               Hits: 50  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+               Buffers: shared hit=2
+               ->  Index Scan using endpoints_id_project_key on endpoints en (actual time=0.008..0.008 rows=1 loops=1)
+                     Index Cond: (id = e.endpoint_id)
+                     Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=398
+ Planning Time: 1.667 ms
+ Execution Time: 0.154 ms
+(27 rows)
+
+```
+
+## Event list, filtered by method and content type (ListEventsDesc)
+
+```
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.050..0.255 rows=51 loops=1)
+   Buffers: shared hit=29
+   ->  Nested Loop (actual time=0.049..0.250 rows=51 loops=1)
+         Buffers: shared hit=29
+         ->  Nested Loop (actual time=0.035..0.220 rows=51 loops=1)
+               Buffers: shared hit=27
+               ->  Index Scan using webhook_events_project_id_idx on webhook_events e (actual time=0.018..0.188 rows=51 loops=1)
+                     Index Cond: ((project_id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid) AND (id > '00000000-0000-0000-0000-000000000000'::uuid) AND (id < 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+                     Filter: ((method = ANY ('{PUT}'::text[])) AND (content_type ~~* 'text/%'::text))
+                     Rows Removed by Filter: 559
+                     Buffers: shared hit=25
+               ->  Materialize (actual time=0.000..0.000 rows=1 loops=51)
+                     Buffers: shared hit=2
+                     ->  Index Scan using projects_pkey on projects p (actual time=0.009..0.010 rows=1 loops=1)
+                           Index Cond: (id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+                           Filter: (owner_id = '4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L'::text)
+                           Buffers: shared hit=2
+         ->  Memoize (actual time=0.000..0.000 rows=1 loops=51)
+               Cache Key: e.endpoint_id
+               Cache Mode: logical
+               Hits: 50  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+               Buffers: shared hit=2
+               ->  Index Scan using endpoints_id_project_key on endpoints en (actual time=0.010..0.010 rows=1 loops=1)
+                     Index Cond: (id = e.endpoint_id)
+                     Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=446
+ Planning Time: 1.786 ms
+ Execution Time: 0.321 ms
+(29 rows)
+
+```
+
+## Event list, oldest first (ListEventsAsc)
+
+```
+                                                                                                  QUERY PLAN                                                                                                   
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.043..0.099 rows=51 loops=1)
+   Buffers: shared hit=11
+   ->  Nested Loop (actual time=0.042..0.094 rows=51 loops=1)
+         Buffers: shared hit=11
+         ->  Nested Loop (actual time=0.032..0.067 rows=51 loops=1)
+               Buffers: shared hit=9
+               ->  Index Scan Backward using webhook_events_project_id_idx on webhook_events e (actual time=0.014..0.034 rows=51 loops=1)
+                     Index Cond: ((project_id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid) AND (id > '00000000-0000-0000-0000-000000000000'::uuid) AND (id < 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid))
+                     Buffers: shared hit=7
+               ->  Materialize (actual time=0.000..0.000 rows=1 loops=51)
+                     Buffers: shared hit=2
+                     ->  Index Scan using projects_pkey on projects p (actual time=0.013..0.013 rows=1 loops=1)
+                           Index Cond: (id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+                           Filter: (owner_id = '4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L'::text)
+                           Buffers: shared hit=2
+         ->  Memoize (actual time=0.000..0.000 rows=1 loops=51)
+               Cache Key: e.endpoint_id
+               Cache Mode: logical
+               Hits: 50  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+               Buffers: shared hit=2
+               ->  Index Scan using endpoints_id_project_key on endpoints en (actual time=0.008..0.008 rows=1 loops=1)
+                     Index Cond: (id = e.endpoint_id)
+                     Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=396
+ Planning Time: 1.565 ms
+ Execution Time: 0.157 ms
+(27 rows)
+
+```
+
+## Event detail (GetEvent)
+
+```
+                                                                   QUERY PLAN                                                                    
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ Nested Loop (actual time=0.051..0.053 rows=1 loops=1)
+   Buffers: shared hit=7
+   ->  Nested Loop (actual time=0.041..0.042 rows=1 loops=1)
+         Buffers: shared hit=5
+         ->  Index Scan using webhook_events_id_project_key on webhook_events e (actual time=0.025..0.025 rows=1 loops=1)
+               Index Cond: ((id = '01a1c92c-e39c-7852-8cd2-d045a68a6da9'::uuid) AND (project_id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid))
+               Buffers: shared hit=3
+         ->  Index Scan using projects_pkey on projects p (actual time=0.014..0.015 rows=1 loops=1)
+               Index Cond: (id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+               Filter: (owner_id = '4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L'::text)
+               Buffers: shared hit=2
+   ->  Index Scan using endpoints_id_project_key on endpoints en (actual time=0.009..0.009 rows=1 loops=1)
+         Index Cond: (id = e.endpoint_id)
+         Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=515
+ Planning Time: 1.963 ms
+ Execution Time: 0.144 ms
+(18 rows)
+
+```
+
+## Replay history, first page (ListReplays)
+
+```
+                                                            QUERY PLAN                                                            
+----------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.040..0.073 rows=51 loops=1)
+   Buffers: shared hit=6
+   ->  Nested Loop (actual time=0.039..0.068 rows=51 loops=1)
+         Buffers: shared hit=6
+         ->  Index Scan using replay_attempts_project_created_idx on replay_attempts r (actual time=0.017..0.023 rows=51 loops=1)
+               Index Cond: (project_id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+               Buffers: shared hit=4
+         ->  Materialize (actual time=0.000..0.001 rows=1 loops=51)
+               Buffers: shared hit=2
+               ->  Index Scan using projects_pkey on projects p (actual time=0.017..0.017 rows=1 loops=1)
+                     Index Cond: (id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+                     Filter: (owner_id = '4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L'::text)
+                     Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=358
+ Planning Time: 1.397 ms
+ Execution Time: 0.114 ms
+(17 rows)
+
+```
+
+## Replays of one event (ListReplays with event_id)
+
+```
+                                                          QUERY PLAN                                                           
+-------------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.018..0.019 rows=0 loops=1)
+   Buffers: shared hit=2
+   ->  Nested Loop (actual time=0.017..0.018 rows=0 loops=1)
+         Buffers: shared hit=2
+         ->  Index Scan using replay_attempts_event_created_idx on replay_attempts r (actual time=0.017..0.017 rows=0 loops=1)
+               Index Cond: (event_id = '01a1c92c-e39c-7852-8cd2-d045a68a6da9'::uuid)
+               Filter: (project_id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+               Buffers: shared hit=2
+         ->  Index Scan using projects_pkey on projects p (never executed)
+               Index Cond: (id = '01a1db0f-7044-7963-a018-c7b55fc99122'::uuid)
+               Filter: (owner_id = '4Ou6VyzhcIPAY3XarHnSFCxkdzTkKr5L'::text)
+ Planning:
+   Buffers: shared hit=259
+ Planning Time: 0.984 ms
+ Execution Time: 0.071 ms
+(15 rows)
+
+```

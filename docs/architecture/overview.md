@@ -1,45 +1,111 @@
 # Architecture overview
 
-This diagram shows what is **implemented today**. It grows as changes ship. The
-target architecture and decisions are in [`docs/plan/mvp-plan.md`](../plan/mvp-plan.md).
+This page shows what is **implemented today**: three running processes
+(`api`, `worker`, and the Better Auth `auth` service), two one-shot migration
+steps, and PostgreSQL. The decisions behind it are recorded in
+[`docs/decisions/`](../decisions/README.md); the deployment layout is in
+[`docs/deployment.md`](../deployment.md).
+
+## Components and trust boundaries
 
 ```mermaid
 flowchart LR
-  browser["Browser<br/>(RelayLab SPA)"]
-  sender["Webhook sender<br/>(provider or curl, untrusted)"]
-
-  subgraph dev["Local development (Docker Compose)"]
-    vite["web: Vite dev server<br/>(hot reload, proxies /api, /h, health)"]
-    subgraph image["relaylab image (distroless, nonroot)"]
-      api["api<br/>/healthz, /readyz<br/>/api/v1/me, projects, endpoints, events (session required)<br/>/api/v1/projects/{id}/events/stream (SSE, session required)<br/>/h/{token} public ingestion (no session)<br/>/api/auth/* proxy<br/>embedded web build<br/>realtime broker: one LISTEN connection per instance"]
-      worker["worker<br/>/healthz, /readyz (outbound_guard), /metrics on :8081<br/>replay job runner (SKIP LOCKED leases)<br/>outbound guard + heartbeat every 15 s<br/>retention purge every 10 min (advisory lock)"]
-      migrate["api migrate<br/>(one-shot, goose)"]
-    end
-    subgraph authimg["relaylab-auth image (Node 24)"]
-      auth["auth: Better Auth 1.7.18<br/>:3001, internal network only<br/>prunes stale rateLimit rows"]
-      authmigrate["auth migrate<br/>(one-shot, runs first)"]
-    end
-    pg[("PostgreSQL 17<br/>schema app: projects, endpoints, webhook_events,<br/>replay_attempts, jobs, worker_heartbeats,<br/>audit_log, goose_db_version<br/>schema auth: user, session, account,<br/>verification, rateLimit")]
-    mailpit["Mailpit<br/>SMTP :1025, inbox :8025"]
+  subgraph internet["Internet (untrusted)"]
+    sender["Webhook senders<br/>(providers, curl)"]
+    browser["Browser<br/>(RelayLab web app)"]
+    dest["Replay destinations<br/>(public HTTPS only)"]
   end
 
-  sender -->|"POST /h/{token}: credential values redacted,<br/>stored before the ack"| api
-  api -->|"after commit: pg_notify('events', ids only)"| pg
-  pg -.->|"LISTEN events → broker → streams of that project"| api
-  api -.->|"SSE: event summaries, owner-checked,<br/>session re-checked every ≤60 s"| browser
-  browser -->|"HTTP, same origin, session cookie"| vite
-  vite -->|"proxy"| api
-  browser -.->|"production layout: api serves the SPA"| api
-  api -->|"/api/auth/* + shared proxy header"| auth
-  api -->|"app_runtime: DML on app,<br/>SELECT auth.session, auth.user"| pg
-  worker -->|"app_runtime: claim jobs, record results,<br/>heartbeat, sink events, retention deletes"| pg
-  api -->|"create replay + job + audit (one tx),<br/>NOTIFY replay_jobs"| pg
-  dest["Replay destination<br/>(public internet only)"]
-  worker -->|"HTTPS through the outbound guard:<br/>public addresses only, no redirects"| dest
-  migrate -->|"app_migrator (DDL on app)"| pg
-  auth -->|"auth_runtime (DML on auth)"| pg
-  authmigrate -->|"auth_migrator (DDL on auth)"| pg
-  auth -->|"verification and reset emails"| mailpit
+  subgraph edge["Public edge: no session"]
+    ingest["/h/{token}<br/>ingestion: token lookup, limits,<br/>credential redaction, store then ack"]
+    static["Web app, /healthz, /readyz,<br/>GET /api/v1/config"]
+  end
+
+  subgraph authn["Authenticated zone: session cookie, same origin"]
+    v1["/api/v1/*<br/>projects, endpoints, events, replays, audit log<br/>owner-scoped; origin and JSON checks"]
+    sse["/api/v1/projects/{id}/events/stream<br/>SSE, session re-checked every 60 s"]
+    proxy["/api/auth/* proxy<br/>+ shared secret, derived client IP"]
+  end
+
+  subgraph internal["Internal: never reachable from the internet"]
+    auth["auth service<br/>Better Auth 1.7.18<br/>sessions, accounts, demo users"]
+    worker["worker<br/>replay jobs (SKIP LOCKED leases),<br/>retention purge, guard heartbeat"]
+    guard["outbound guard<br/>scheme, port, host, DNS and<br/>dial-time IP checks, no redirects"]
+    pg[("PostgreSQL<br/>schema auth (Better Auth)<br/>schema app (goose)")]
+  end
+
+  sender -->|"any method"| ingest
+  browser -->|"HTTPS"| static
+  browser -->|"cookie"| v1
+  browser -->|"cookie"| sse
+  browser -->|"sign-in, sign-up, sign-out"| proxy
+  proxy --> auth
+  ingest -->|"insert + NOTIFY events (ids only)"| pg
+  v1 -->|"app_runtime: owner-scoped queries;<br/>SELECT auth.session, auth.user"| pg
+  pg -.->|"LISTEN events"| sse
+  v1 -->|"replay + job + audit in one tx,<br/>NOTIFY replay_jobs"| pg
+  pg -.->|"claim jobs"| worker
+  worker -->|"URL replay"| guard
+  guard -->|"only public addresses"| dest
+  worker -->|"test-sink replay: stored as a new event,<br/>no network"| pg
+  auth -->|"auth_runtime"| pg
+```
+
+All three processes run from two images: `relaylab` (Go: `api`, `api
+migrate`, `worker`) and `relaylab-auth` (Node: the auth service and its
+migrate command). Locally, Docker Compose also runs Mailpit (SMTP) and,
+during development, the Vite dev server in front of the api.
+
+## Inbound webhook flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant S as Sender
+  participant I as api: /h/{token}
+  participant P as PostgreSQL
+  participant B as api: realtime broker
+  participant W as Browser (event list)
+  S->>I: POST /h/{token}/charges (headers, body)
+  I->>I: rate limits (IP, endpoint), size and time limits
+  I->>P: look up endpoint by token HMAC
+  I->>I: replace credential header and query values with [REDACTED]
+  I->>P: insert event, touch endpoint (one transaction)
+  I-->>S: 200 with the event id
+  I->>P: NOTIFY events (project id, event id)
+  P-->>B: notification (one LISTEN connection per api instance)
+  B->>P: load the summary, scoped to the stream's owner
+  B-->>W: SSE event (summary only; never body or header values)
+```
+
+## Replay flow
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as Browser
+  participant A as api: /api/v1
+  participant P as PostgreSQL
+  participant K as worker
+  participant G as outbound guard
+  participant D as Destination
+  U->>A: POST .../replays (destination, Idempotency-Key)
+  A->>A: owner check, URL pre-flight (no DNS), limits
+  A->>P: replay + job + audit entry (one tx), NOTIFY replay_jobs
+  A-->>U: 202 queued
+  K->>P: claim job (SKIP LOCKED, per-project limit, lease)
+  alt test sink
+    K->>P: store the request as a new event on the sink endpoint
+  else URL (REPLAY_ENABLED)
+    K->>G: send request
+    G->>G: resolve DNS, check every address, check the socket address
+    G->>D: HTTPS request (no redirects, bounded time and size)
+    D-->>G: response
+    G-->>K: status, headers, capped body
+  end
+  K->>P: record the result, erase added header values, finish job
+  U->>A: GET .../replays/{id}
+  A-->>U: state, response, duration
 ```
 
 ## Request path through the API

@@ -36,6 +36,36 @@ flowchart LR
 | API → database | `app_runtime` has `SELECT` on `auth."session"` and `auth."user"` only. It cannot write to any `auth` table or read `account` (password hashes), `verification` (tokens), or `rateLimit`. An integration test proves every write is denied. |
 | Identity | Handlers get the acting user only from the validated session (`identity.FromContext`). User ids in bodies, query strings, or headers such as `X-User-Id` are ignored. |
 
+## Sign-in and an authenticated request
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as Browser
+  participant G as Go API (APP_ORIGIN)
+  participant A as Auth service (Better Auth, internal)
+  participant P as PostgreSQL
+  B->>G: POST /api/auth/sign-in/email (Origin: APP_ORIGIN)
+  G->>A: same request + X-RelayLab-Proxy secret, X-Forwarded-For = derived client IP
+  A->>A: check Origin, rate limit, password (scrypt)
+  A->>P: insert auth.session (auth_runtime)
+  A-->>G: 200 + Set-Cookie session_token (signed)
+  G-->>B: 200 + Set-Cookie (host-only, HttpOnly, SameSite=Lax, Secure in production)
+  B->>G: GET /api/v1/projects (cookie)
+  G->>G: verify cookie HMAC with BETTER_AUTH_SECRET (tampered: 401, no query)
+  G->>P: SELECT session + user by token (app_runtime, read-only)
+  P-->>G: user id, expiry, verified, isAnonymous
+  G->>P: owner-scoped query (WHERE owner_id = session user)
+  G-->>B: 200, or 401 / 403 / 404
+```
+
+**What Go never trusts.** The acting user comes only from the validated
+session. User ids, owner ids, or project ownership claims in request bodies,
+query strings, or headers (such as `X-User-Id`) are ignored; every query is
+scoped to the session user, and a resource owned by someone else is
+indistinguishable from one that does not exist (`404`). Client-supplied
+forwarding headers are replaced, never trusted.
+
 ## How the Go API validates a session
 
 The decision recorded in the design is **option A, shared-database validation**.

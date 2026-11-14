@@ -61,6 +61,7 @@ func newRouter(d routerDeps) http.Handler {
 		httpx.AccessLog,
 		httpx.Recoverer,
 		httpx.SecurityHeaders,
+		httpx.StrictTransportSecurity(d.cfg.Env == config.EnvProduction),
 		httpx.HeaderLimit(d.cfg.Limits.HTTPMaxHeaderBytes),
 	)
 	r.MethodNotAllowed(httpx.MethodNotAllowed)

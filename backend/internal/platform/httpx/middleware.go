@@ -197,6 +197,22 @@ func SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// StrictTransportSecurity tells browsers to use HTTPS for this host for a year
+// (production profile, whose origin is always https). It omits
+// includeSubDomains and preload: the host may be a subdomain of a shared domain
+// such as run.app. When disabled (plain-HTTP development) it sets nothing.
+func StrictTransportSecurity(enabled bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if !enabled {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // HeaderLimit rejects requests whose headers exceed maxBytes with 431.
 // http.Server.MaxHeaderBytes remains a hard backstop at the connection level.
 func HeaderLimit(maxBytes int) func(http.Handler) http.Handler {

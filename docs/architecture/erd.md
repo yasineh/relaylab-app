@@ -437,7 +437,7 @@ their sessions, accounts, and projects.
 | Role | Privileges |
 |---|---|
 | `app_migrator` | Owns `app`; DDL there; `USAGE` on `auth` and `REFERENCES` on `auth."user"` (for app foreign keys) |
-| `app_runtime` | `USAGE` on `app`; `SELECT, INSERT, UPDATE, DELETE` on tables `app_migrator` creates (default privileges); `USAGE` on `auth` and **`SELECT` on `auth."session"` and `auth."user"` only** (granted by the auth migrate command; writes are denied, enforced by tests) |
+| `app_runtime` | `USAGE` on `app`; `SELECT, INSERT, UPDATE, DELETE` on tables `app_migrator` creates (default privileges), except goose's `app.goose_db_version`, which it can only read (migration `00008`); `USAGE` on `auth` and **`SELECT` on `auth."session"` and `auth."user"` only** (granted by the auth migrate command; writes are denied, enforced by tests) |
 | `auth_migrator` | Owns `auth`; DDL there |
 | `auth_runtime` | `USAGE` on `auth`; data access to tables `auth_migrator` creates |
 

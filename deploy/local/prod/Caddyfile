@@ -4,6 +4,11 @@
 	local_certs
 	skip_install_trust
 	admin off
+	# Above the API's 32 KiB header limit, so the API's own limit and JSON
+	# error decide, as behind Cloud Run's front end.
+	servers {
+		max_header_size 64KiB
+	}
 }
 
 https://localhost:8443 {

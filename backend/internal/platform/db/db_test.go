@@ -143,6 +143,40 @@ func TestRuntimeRoleCannotMigrate(t *testing.T) {
 	}
 }
 
+// The runtime role reads goose's version table (readiness reports the applied
+// version) but must not change it: a compromised API could otherwise make a
+// later deploy skip or repeat migrations (release-hardening-review).
+func TestRuntimeRoleCannotRewriteMigrationHistory(t *testing.T) {
+	d := dbtest.New(t)
+	authtest.Prepare(t, d)
+	ctx := context.Background()
+	if err := db.Migrate(ctx, config.NewSecret(d.MigratorURL), quiet); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := pgx.Connect(ctx, d.AdminURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = admin.Close(ctx) }()
+	for priv, want := range map[string]bool{"SELECT": true, "INSERT": false, "UPDATE": false, "DELETE": false, "TRUNCATE": false} {
+		var got bool
+		if err := admin.QueryRow(ctx, `SELECT has_table_privilege('app_runtime', 'app.goose_db_version', $1)`, priv).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("app_runtime %s on app.goose_db_version = %v, want %v", priv, got, want)
+		}
+	}
+	runtime, err := db.Open(ctx, config.NewSecret(d.RuntimeURL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	if _, err := db.AppliedVersion(ctx, runtime); err != nil {
+		t.Fatalf("runtime role must still read the applied version: %v", err)
+	}
+}
+
 func TestMigrateFailsFastWithoutAuthSchema(t *testing.T) {
 	d := dbtest.New(t)
 	err := db.Migrate(context.Background(), config.NewSecret(d.MigratorURL), quiet)

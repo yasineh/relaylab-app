@@ -618,7 +618,7 @@ stored exactly as sent, so they may contain confidential or personal data.
 | 400 | `invalid_request` | The body could not be read (for example, the client disconnected) |
 | 404 | `endpoint_not_found` | Unknown, rotated-away, deleted, or malformed token. Reveals nothing about projects or users |
 | 405 | `method_not_allowed` | Unsupported method |
-| 408 | `request_timeout` | The body did not arrive within `LIMIT_INGEST_BODY_TIMEOUT_SECONDS` (10 s) |
+| 408 | `request_timeout` | The body did not arrive within `LIMIT_INGEST_BODY_TIMEOUT_SECONDS` (10 s). A reverse proxy still forwarding the body may report this as `502` instead (the local production-mode stack's Caddy does) |
 | 410 | `endpoint_disabled` | The endpoint is disabled |
 | 413 | `payload_too_large` | Body over `LIMIT_INGEST_MAX_BODY_BYTES` (256 KiB; at most 1 MiB). A body of exactly the limit is accepted |
 | 414 | `uri_too_long` | Path after the token over 2048 characters, or query string over 8192 |

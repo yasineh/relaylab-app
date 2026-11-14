@@ -11,7 +11,7 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { mapAuthError } from '@/features/auth/errors'
 import { PASSWORD_MAX, PASSWORD_MIN, nameSchema, newPasswordSchema } from '@/features/auth/schemas'
-import { meQueryKey, useMe } from '@/hooks/session'
+import { leaveSession, meQueryKey, useMe } from '@/hooks/session'
 import { authClient } from '@/lib/auth-client'
 
 export function AccountSettingsPage() {
@@ -189,8 +189,7 @@ function SessionsSection() {
       setError(mapAuthError(err).message)
       return
     }
-    queryClient.clear()
-    void navigate('/sign-in?reason=signed-out', { replace: true })
+    await leaveSession(queryClient, navigate, '/sign-in?reason=signed-out')
   }
   return (
     <Section
@@ -236,8 +235,7 @@ function DeleteAccountSection() {
       }
       return
     }
-    queryClient.clear()
-    void navigate('/sign-in?reason=account-deleted', { replace: true })
+    await leaveSession(queryClient, navigate, '/sign-in?reason=account-deleted')
   })
   return (
     <Section

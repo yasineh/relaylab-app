@@ -337,3 +337,17 @@ func TestAccessLogNeverRecordsIngestTokens(t *testing.T) {
 		t.Fatalf("expected route patterns, got: %s", out)
 	}
 }
+
+func TestStrictTransportSecurity(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	rec := httptest.NewRecorder()
+	StrictTransportSecurity(true)(ok).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := rec.Header().Get("Strict-Transport-Security"); got != "max-age=31536000" {
+		t.Fatalf("enabled: Strict-Transport-Security = %q", got)
+	}
+	rec = httptest.NewRecorder()
+	StrictTransportSecurity(false)(ok).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if got := rec.Header().Get("Strict-Transport-Security"); got != "" {
+		t.Fatalf("disabled: Strict-Transport-Security = %q, want none (plain-HTTP development)", got)
+	}
+}

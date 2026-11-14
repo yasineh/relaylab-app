@@ -17,6 +17,7 @@ import {
   type ResetPasswordValues,
 } from '@/features/auth/schemas'
 import { authClient } from '@/lib/auth-client'
+import { leaveSession } from '@/hooks/session'
 
 /**
  * Landing page for the emailed reset link. Better Auth checks the token at
@@ -70,8 +71,7 @@ function ResetPasswordForm({ token }: { token: string }) {
       return
     }
     // Resetting signs the user out everywhere.
-    queryClient.clear()
-    void navigate('/sign-in?reason=password-reset', { replace: true })
+    await leaveSession(queryClient, navigate, '/sign-in?reason=password-reset')
   })
 
   return (

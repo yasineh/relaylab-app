@@ -1,4 +1,5 @@
 import { useQuery, type QueryClient } from '@tanstack/react-query'
+import type { NavigateFunction } from 'react-router'
 
 import { fetchMe, fetchPublicConfig, isApiError } from '@/lib/api'
 
@@ -44,4 +45,19 @@ export async function resetUserData(client: QueryClient): Promise<void> {
     predicate: (q) => q.queryKey[0] !== configQueryKey[0] && q.queryKey[0] !== meQueryKey[0],
   })
   await client.invalidateQueries({ queryKey: meQueryKey })
+}
+
+/**
+ * Leaves the signed-in screens after the session ended (sign-out, account
+ * deletion, password reset): navigates to `to` first, then drops the cache.
+ * Clearing first would let the still-mounted route guard refetch `me`, see no
+ * session, and redirect to "session expired" before this navigation lands.
+ */
+export async function leaveSession(
+  client: QueryClient,
+  navigate: NavigateFunction,
+  to: string,
+): Promise<void> {
+  await navigate(to, { replace: true })
+  client.clear()
 }

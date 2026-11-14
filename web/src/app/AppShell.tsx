@@ -6,7 +6,7 @@ import logoIcon from '@/assets/brand/logo-icon.svg'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { SiteFooter } from '@/app/SiteFooter'
 import { DemoBanner } from '@/features/demo/DemoBanner'
-import { useMe, usePublicConfig } from '@/hooks/session'
+import { leaveSession, useMe, usePublicConfig } from '@/hooks/session'
 import { authClient } from '@/lib/auth-client'
 import { cn } from '@/lib/utils'
 
@@ -57,8 +57,7 @@ function AccountNav() {
 
   async function signOut() {
     await authClient.signOut()
-    queryClient.clear()
-    void navigate('/sign-in?reason=signed-out', { replace: true })
+    await leaveSession(queryClient, navigate, '/sign-in?reason=signed-out')
   }
 
   if (me.isPending) return <div className="ml-auto" />

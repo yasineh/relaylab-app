@@ -116,7 +116,7 @@ Every request passes through the same middleware, in this order:
 2. **Real IP**: trust `X-Forwarded-For` only from `TRUSTED_PROXY_CIDRS`.
 3. **Access log**: one JSON line per request with the route pattern, status, duration, and size.
 4. **Recoverer**: panics become `500 internal_error`; the stack trace goes to logs only.
-5. **Security headers**: `nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY`, and a CSP without inline scripts.
+5. **Security headers**: `nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY`, a CSP without inline scripts, and, in the production profile, `Strict-Transport-Security: max-age=31536000`.
 6. **Header limit**: `431 headers_too_large` above `LIMIT_HTTP_MAX_HEADER_BYTES`.
 
 `/api/*` additionally applies `LIMIT_API_MAX_BODY_BYTES`. Then:

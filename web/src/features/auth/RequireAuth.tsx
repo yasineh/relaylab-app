@@ -7,7 +7,7 @@ import { AuthLayout } from '@/components/auth-layout'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { ResendVerification } from '@/features/auth/ResendVerification'
-import { useMe } from '@/hooks/session'
+import { leaveSession, useMe } from '@/hooks/session'
 import { isApiError } from '@/lib/api'
 import { authClient } from '@/lib/auth-client'
 import { signInPath } from '@/lib/redirect'
@@ -66,8 +66,7 @@ function UnverifiedState() {
   const navigate = useNavigate()
   async function signOut() {
     await authClient.signOut()
-    queryClient.clear()
-    void navigate('/sign-in?reason=signed-out', { replace: true })
+    await leaveSession(queryClient, navigate, '/sign-in?reason=signed-out')
   }
   return (
     <AuthLayout title="Verify your email to continue">

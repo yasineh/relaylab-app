@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "screenshots": "node tools/screenshots.ts",
-    "record-demo": "node tools/record-demo.ts"
+    "record-demo": "node tools/record-demo.ts",
+    "a11y-scan": "node tools/a11y-scan.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.65.0",

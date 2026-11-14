@@ -100,11 +100,20 @@ check "body of 256 KiB + 1" "$(req -X POST --data-binary @"$WORK/over.bin" "$HOO
 headers=()
 for i in $(seq 1 101); do headers+=(-H "X-Field-$i: v"); done
 check "101 header fields" "$(req -X POST "${headers[@]}" -d x "$HOOK")" 431
-check "40 KiB of headers" "$(req -X POST -H "X-Big: $(head -c 40960 /dev/zero | tr '\0' 'b')" -d x "$HOOK")" 431
-start=$(date +%s)
-status="$({ printf 'abc'; sleep 13; } | curl -sk -o "$WORK/body" -w '%{http_code}' -X POST -H 'Content-Length: 100' --data-binary @- "$HOOK")"
-check "a body that stops arriving (Content-Length 100, 3 bytes sent)" "$status" 408
-echo "      answered after $(($(date +%s) - start)) s"
+check "34 KiB of headers (over LIMIT_HTTP_MAX_HEADER_BYTES)" "$(req -X POST -H "X-Big: $(head -c 34816 /dev/zero | tr '\0' 'b')" -d x "$HOOK")" 431
+check "  answered by the API's limit" "$(code)" headers_too_large
+check "40 KiB of headers (the server's hard backstop)" "$(req -X POST -H "X-Big: $(head -c 40960 /dev/zero | tr '\0' 'b')" -d x "$HOOK")" 431
+# The API answers a stalled body with 408 (checked from inside the stack's
+# network). A reverse proxy may report the API's early reply differently while
+# it is still forwarding the body: the local Caddy answers 502 (finding F4).
+NET="$(docker inspect "$("${COMPOSE[@]}" ps -q api)" --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}')"
+status="$(docker run --rm --network "$NET" -e HOOK_PATH="${HOOK#"$BASE"}" --entrypoint sh \
+  alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf -c \
+  'apk add -q --no-cache curl >/dev/null; { printf abc; sleep 13; } |
+   curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Length: 100" --data-binary @- "http://api:8080$HOOK_PATH"')"
+check "a body that stops arriving, at the API (Content-Length 100, 3 bytes sent)" "$status" 408
+status="$({ printf 'abc'; sleep 13; } | curl -sk -o /dev/null -w '%{http_code}' -X POST -H 'Content-Length: 100' --data-binary @- "$HOOK")"
+echo "      the same through the local Caddy proxy: $status (finding F4)"
 check "unsupported method TRACE" "$(req -X TRACE "$HOOK")" 405
 check "unknown endpoint token" "$(req -X POST -d x "$BASE/h/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")" 404
 check "invalid JSON is stored as sent" "$(req -X POST -H 'Content-Type: application/json' -d '{"broken": ' "$HOOK")" 200
@@ -220,17 +229,21 @@ curl -skI "$BASE/" >"$WORK/h"
 for h in Strict-Transport-Security Content-Security-Policy X-Content-Type-Options Referrer-Policy; do
   check "landing page sends $h" "$(grep -ci "^$h:" "$WORK/h")" 1
 done
-echo "      app_runtime (Go runtime role):"
+# Privilege checks read the catalog: nothing is modified.
+priv() { sql "SELECT has_table_privilege('$1', '$2', '$3')"; }
+colpriv() { sql "SELECT has_column_privilege('$1', '$2', '$3', '$4')"; }
 r="$(as_role app_runtime prod-local-only-app-runtime 'CREATE TABLE app.x (id int)')"
 check "app_runtime cannot create tables" "$(grep -c 'permission denied' <<<"$r")" 1
-r="$(as_role app_runtime prod-local-only-app-runtime 'SELECT password FROM auth.account LIMIT 1')"
-check "app_runtime cannot read password hashes" "$(grep -c 'permission denied' <<<"$r")" 1
-r="$(as_role app_runtime prod-local-only-app-runtime 'SELECT token FROM auth.session LIMIT 1')"
-check "app_runtime cannot read session tokens" "$(grep -c 'permission denied' <<<"$r")" 1
-r="$(as_role app_runtime prod-local-only-app-runtime 'DELETE FROM app.goose_db_version')"
-check "app_runtime cannot change migration history" "$(grep -c 'permission denied' <<<"$r")" 1
-r="$(as_role auth_runtime prod-local-only-auth-runtime 'SELECT count(*) FROM app.webhook_events')"
-check "auth_runtime cannot read webhook events" "$(grep -c 'permission denied' <<<"$r")" 1
+check "app_runtime cannot read password hashes (auth.account.password)" "$(colpriv app_runtime auth.account password SELECT)" f
+check "app_runtime reads session tokens only to look sessions up (SELECT)" "$(colpriv app_runtime auth.session token SELECT)" t
+for p in INSERT UPDATE DELETE; do
+  check "app_runtime cannot $p auth.session" "$(priv app_runtime auth.session "$p")" f
+done
+check "app_runtime reads the migration version (readiness)" "$(priv app_runtime app.goose_db_version SELECT)" t
+for p in INSERT UPDATE DELETE TRUNCATE; do
+  check "app_runtime cannot $p migration history (app.goose_db_version)" "$(priv app_runtime app.goose_db_version "$p")" f
+done
+check "auth_runtime cannot read webhook events" "$(priv auth_runtime app.webhook_events SELECT)" f
 r="$(as_role auth_runtime prod-local-only-auth-runtime 'CREATE TABLE auth.x (id int)')"
 check "auth_runtime cannot create tables" "$(grep -c 'permission denied' <<<"$r")" 1
 

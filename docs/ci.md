@@ -32,6 +32,7 @@ passed.
 | **Security scans** | gitleaks finds a secret in the full history of the selected branch, govulncheck finds a reachable Go vulnerability, or `pnpm audit --prod` reports a high/critical advisory |
 | **Container image** | Either image (Go binaries, auth service) fails to build or runs as root, or Trivy finds a fixable HIGH/CRITICAL vulnerability or a secret in it |
 | **End-to-end** | Prettier, oxlint, or TypeScript fails for `e2e/`, the e2e stack (`docker-compose.e2e.yml`) does not become healthy, or any Playwright test fails (Chromium, no retries). On failure the HTML report, traces, screenshots, and the stack's logs are uploaded as the `e2e-report` artifact. See [Testing](development/testing.md) |
+| **Documentation** | A Mermaid diagram in `README.md` or `docs/` fails to render (`scripts/check-mermaid.sh`). The other documentation checks are Go tests: relative links and anchors, API route coverage, the docs index, and the generated limits table (Backend test), and the ERD against the migrated schema (Auth contract) |
 | **ci-success** | Any job above failed, was cancelled, or was skipped. **This is the one result to check before merging** |
 
 ## Workflow security

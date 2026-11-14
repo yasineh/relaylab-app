@@ -41,6 +41,10 @@ Ctrl-C to stop all four. Postgres and Mailpit keep running; stop them with
 
 ### Your first account
 
+The quickest way in is **Try the demo** on <http://localhost:5173>: a demo
+workspace with sample webhooks (demos are on by default outside production).
+For a real account:
+
 1. Open <http://localhost:5173/sign-up> and create an account (passwords need
    12–128 characters and must not be common).
 2. Open the Mailpit inbox at <http://localhost:8025> and click the verification
@@ -70,6 +74,20 @@ This runs `postgres`, `mailpit`, the one-shot `db-roles`, `auth-migrate`, and
 `migrate` steps (in that order), `auth`, `api`, `worker`, and `web` (Vite in a container)
 from the production image layout. The `auth` container is on the internal
 network only; the API reaches it at `http://auth:3001`.
+
+### Production mode locally
+
+To check production behaviour (TLS everywhere, PgBouncer in transaction mode,
+the production defaults) without a cloud account:
+
+```sh
+docker compose -f docker-compose.prod.yml up -d --build --wait
+scripts/prod-smoke.sh          # 12 checks; see docs/deployment.md
+docker compose -f docker-compose.prod.yml down -v
+```
+
+The app is at <https://localhost:8443> (a local certificate your browser does
+not trust). Details: [Deployment: production-mode local check](../deployment.md#production-mode-local-check).
 
 ### Ports
 
@@ -106,6 +124,8 @@ If a port is taken on your machine, change it in `.env`:
 | `pnpm build` | Production web build and an API binary that embeds it (`backend/bin/`) |
 | `pnpm check` | Format check, lint, typecheck, tests and build: run before pushing |
 | `pnpm sqlc` | Regenerate typed Go code from `backend/db/queries` |
+| `pnpm docs:generate` | Regenerate the generated blocks in the ERD and the security doc (needs the test database; tests fail when they are stale) |
+| `scripts/check-mermaid.sh` | Render every Mermaid diagram in the docs (Docker) |
 | `pnpm deploy:check` | Validate the Cloud Run manifests offline and lint every workflow ([Deployment](../deployment.md)) |
 | `pnpm secrets:scan` | gitleaks over the working tree |
 
@@ -299,22 +319,30 @@ Compose stack; see [Testing](testing.md).
 ```
 package.json, pnpm-workspace.yaml   workspace root: run everything from here
 backend/                            Go module `relaylab`
-  cmd/api                           HTTP server and `migrate` subcommand
-  cmd/worker                        background worker (health only for now)
-  internal/platform                 config, limits, logging, httpx, db, health
+  cmd/api                           HTTP server, `migrate` and `healthcheck` subcommands
+  cmd/worker                        background worker: replay jobs, retention purge, guard heartbeat
+  cmd/schemadoc                     regenerates the generated blocks in the docs
+  internal/platform                 config, limits, logging, httpx, db, health, schemadoc
+  internal/identity                 session validation, /api/auth proxy, /api/v1/me
+  internal/projects, endpoints      project and endpoint services and handlers
+  internal/ingestion                public /h/{token} ingestion
+  internal/events, realtime         event explorer API and live streams (SSE, LISTEN/NOTIFY)
+  internal/replay                   replay API, job runner, delivery; replay/outbound is the SSRF guard
+  internal/retention, demo          retention purge; demo workspace seeding
   internal/webui                    serves the embedded web build (`-tags embedweb`)
+  internal/deploycheck, doccheck    offline checks of the deploy manifests and the docs
+  internal/testutil                 deletion (no-orphans contract) and isolation (cross-user 404) helpers
   migrations/                       goose SQL migrations (app schema)
   db/queries/                       sqlc queries
-  internal/identity                 session validation, /api/auth proxy, /api/v1/me
-  internal/projects                 project service and /api/v1/projects handlers
-  internal/testutil                 deletion (no-orphans contract) and isolation (cross-user 404) helpers
   scripts/                          env loader and test runners used by package scripts
 auth/                               Better Auth service (Node 24, TypeScript)
   src/                              server, Better Auth config, mailer, migrate, CLIs
   test/                             integration tests against a real database
 web/                                React + TypeScript + Vite app
 e2e/                                Playwright end-to-end suite and its echo destination
-deploy/                             roles.sql and local Postgres init
+deploy/                             roles.sql, local Postgres init, the production-mode stack's
+                                    configs, Cloud Run manifests, monitoring templates
+scripts/                            prod-smoke.sh, check-mermaid.sh
 openspec/                           specifications and planned changes
 docs/                               documentation
 ```
